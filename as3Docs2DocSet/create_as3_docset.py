@@ -5,6 +5,7 @@
 #
 # Edited script to create a .docset for the as3/flex documentation
 # Note that its now in python 3.
+# also requires BeautifulSoup, which is included. 
 # 
 # edited by Mark Grandi
 # 2/21/2012
@@ -18,6 +19,7 @@ import shutil
 import subprocess
 from bs4 import BeautifulSoup
 import argparse
+import sys
 
 
 
@@ -49,13 +51,27 @@ def verify_docpath(argString):
                     break
             if not success:
                 raise argparse.ArgumentTypeError("This doesn't seem to be the actionscript 3 documentation, are you in the right folder?")
+
+            # here , we are successful, this is the as3 docs
+            return argString
+
                 
 
     except IOError:
 
         raise argparse.ArgumentTypeError("Could not find index.html, are you in the right folder?")
 
+def verify_outputpath(argString):
+    ''' verifies the output path for the argument parser
+    @param argString - the argument string that gets passed to us by argument parser
+    @return the same string we got, if the path is valid, else raise exception'''
 
+
+    if not os.path.exists(argString):
+
+        raise argparse.ArgumentTypeError("the path specified does not exist")
+
+    return argString
 
 def is_something(tag, something):
     """ Function to help BeautifulSoup find our tokens """
@@ -88,44 +104,36 @@ def makeDocset(args):
         '''
 
     ## Tries to find docsetutil
-    possible_docsetutil_path = [
+    possibleDocsetutilPath= [
         "/Developer/usr/bin/docsetutil",
         "/Applications/Xcode.app/Contents/Developer/usr/bin/docsetutil",
     ]
-    docsetutil_path = [path for path in possible_docsetutil_path if os.path.exists(path)]
-    if len(docsetutil_path) == 0:
+    docsetutilPath = [path for path in possibleDocsetutilPath if os.path.exists(path)]
+    if len(docsetutilPath) == 0:
         trouble("Could not find docsetutil. Please check for docsetutil's location and set it inside the script.")
 
-    docsetutil_path = docsetutil_path[0]
+    docsetutilPath = docsetutilPath[0]
 
     ## Script should run in the folder where the docs live
-    source_folder = os.getcwd()
+    sourceFolder = args.docPath
 
-    # destination folder. this changes throughout the script.
-    dest_folder = os.path.join(source_folder,"as3.docset")
+    # destination folder of the main as3.docset folder/file/thing
+    docsetFolder = os.path.join(args.outputPath,"as3.docset")
 
 
     ## Clean up first if the output folders already exist
-    if os.path.exists(dest_folder):
-        shutil.rmtree(dest_folder)
+    if os.path.exists(docsetFolder):
+        shutil.rmtree(docsetFolder)
 
-    ## Create all the necessary folder hierarchy
-    os.makedirs(dest_folder + "Contents/Resources/Documents/")
-    docset_folder = dest_folder
-    dest_folder = os.path.join(dest_folder, "Contents")
+    print(docsetFolder)
 
-    ## Find the module's index file. this is probably the as3's class index
-    possible_modindex_path = [
-        "package-list.html"
-    ]
-    modindex_path = [path for path in possible_modindex_path if os.path.exists(source_folder + path)]
-    if len(modindex_path) == 0:
-        trouble("Could not find the as3 package index. Please check your doc folder structure and try again.")
-
-    modindex_path = modindex_path[0]
+    ## Create all the necessary folder hierarchy. Don't create "documents" because the copytree will create that 
+    # when we copy the as3 docs over to the "documents" foler. 
+    os.makedirs(os.path.join(docsetFolder,"Contents", "Resources"))
+    contentsFolder = os.path.join(docsetFolder, "Contents")
 
     ## Create Info.plist
-    with open(dest_folder + "Info.plist", "w") as info:
+    with open(os.path.join(contentsFolder, "Info.plist"), "w") as info:
         info.write("""<?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -140,9 +148,22 @@ def makeDocset(args):
         </plist>
         """)
 
+    #Find the module's index file. This is the as3's package-list.html file. 
+    #This is just a XML file that points to the main index file of your documentation
+    possibleModindexPath = [
+        "package-list.html"
+    ]
+    modindexPath = [path for path in possibleModindexPath if os.path.exists(sourceFolder + path)]
+
+    # if we couldn't find the package index
+    if len(modindexPath) == 0:
+        trouble("Could not find the as3 package index. Please check your doc folder structure and try again.")
+
+    modindexPath = modindexPath[0]
+
     ## Create Nodes.xml
-    dest_folder = os.path.join(dest_folder , "Resources")
-    with open(dest_folder + "Nodes.xml", "w") as nodes:
+    resourcesFolder = os.path.join(contentsFolder , "Resources")
+    with open(os.path.join(resourcesFolder ,"Nodes.xml"), "w") as nodes:
         nodes.write("""<?xml version="1.0" encoding="UTF-8"?>
         <DocSetNodes version="1.0">
             <TOC>
@@ -152,14 +173,12 @@ def makeDocset(args):
                 </Node>
             </TOC>
         </DocSetNodes>
-        """.format(modindex_path))
+        """.format(modindexPath))
 
+    documentsFolder = os.path.join(resourcesFolder ,"Documents")
 
-
-    dest_folder = os.path.join(dest_folder ,"Documents")
-
-    # copy the entire langref folder over
-    shutil.copytree(source_folder, dest_folder)
+    # copy the entire langref folder over. This creates "Documents"
+    shutil.copytree(sourceFolder, documentsFolder)
 
     ## I'll hide the header because it makes no sense in a docset
     ## and messes up Dash
@@ -214,8 +233,8 @@ def makeDocset(args):
 
     for htmlFile in htmlPagesToParse:
 
-        # we are in the 'langref' folder, and everything is in there
-        with open(htmlFile, "r") as f:
+        # the html files are inside the Documents folder. 
+        with open(os.path.join(documentsFolder, htmlFile), "r") as f:
 
             # create the soup
             soup = BeautifulSoup(f)
@@ -225,7 +244,7 @@ def makeDocset(args):
 
             for tag in tmpList:
 
-                print(tag.string)
+                print(tag)
 
 
 
@@ -279,7 +298,7 @@ if __name__ == "__main__":
     # optional arguments, if specified these are the input and output files, if not specified, it uses stdin and stdout
     parser.add_argument('docPath', help="the directory where the as3 documentation is located", type=verify_docpath)
     
-    parser.add_argument('outputPath', help="the directory to place the resulting .docset ")
+    parser.add_argument('--outputPath', help="the directory to place the resulting .docset. defaults to os.getcwd()", type=verify_outputpath, default=os.getcwd())
     args = parser.parse_args()
 
     makeDocset(args)
