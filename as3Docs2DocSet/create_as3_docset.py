@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 # encoding: utf-8
+#
+# forked from https://github.com/gpambrozio/PythonScripts
+#
+# Edited script to create a .docset for the as3/flex documentation
+# 
+# edited by Mark Grandi
+# 2/21/2012
+# https://github.com/mgrandi/PythonScripts
+#
 
 import re
 import os
@@ -22,21 +31,33 @@ docsetutil_path = docsetutil_path[0]
 ## Script should run in the folder where the docs live
 source_folder = os.getcwd() + "/"
 
-## Find the Python version of the docs
-python_version = None
-f = open(source_folder + "index.html", 'r')
-for line in f:
-    search = re.search("Python v([0-9.]+) documentation", line)
-    if search:
-        python_version = search.group(1)
-        break
-f.close()
+# destination folder
+dest_folder = source_folder + "as3.docset/" 
 
-if python_version == None:
-    print "I could not find Python's version in the index.html file. Are you in the right folder??"
-    exit(1)
+# make sure we are in the right folder, search for "ActionScript&reg; 3.0 Reference for the Adobe&reg; Flash&reg; Platform"
+# in index.html
+try:
+    with open("index.html", "r") as f:
 
-dest_folder = source_folder + ("python.%s.docset/" % python_version)
+        success = False
+
+        # see if we can find that line. if we do, break out of the loop and keep going. if not, print error and exit
+        for line in f:
+            search = re.search("ActionScript&reg; 3.0 Reference for the Adobe&reg; Flash&reg; Platform", line)
+
+            if search:
+                success = True
+                break
+        if not success:
+            print("This doesn't seem to be the actionscript 3 documentation, are you in the right folder?")
+            sys.exit(1)
+
+except IOError:
+
+    print("Could not find index.html, are you in the right folder?")
+    sys.exit(1)
+
+    
 
 
 def is_something(tag, something):
@@ -67,54 +88,53 @@ os.makedirs(dest_folder + "Contents/Resources/Documents/")
 docset_folder = dest_folder
 dest_folder = dest_folder + "Contents/"
 
-## Find the module's index file. It's different in Python's 3 docs
+## Find the module's index file. this is probably the as3's class index
 possible_modindex_path = [
-    "modindex.html",
-    "py-modindex.html",
+    "package-list.html"
 ]
 modindex_path = [path for path in possible_modindex_path if os.path.exists(source_folder + path)]
 if len(modindex_path) == 0:
-    print "Could not find modindex. Please check your doc folder structure and try again."
+    print "Could not find the as3 package index. Please check your doc folder structure and try again."
     exit(2)
 modindex_path = modindex_path[0]
 
 ## Create Info.plist
-info = open(dest_folder + "Info.plist", "w")
-info.write("""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key>
-    <string>python.%s</string>
-    <key>CFBundleName</key>
-    <string>Python %s</string>
-    <key>DocSetPlatformFamily</key>
-    <string>python</string>
-</dict>
-</plist>
-""" % (python_version, python_version))
-info.close()
+with open(dest_folder + "Info.plist", "w") as info:
+    info.write("""<?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>CFBundleIdentifier</key>
+        <string>as3</string>
+        <key>CFBundleName</key>
+        <string>Actionscript 3</string>
+        <key>DocSetPlatformFamily</key>
+        <string>as3</string>
+    </dict>
+    </plist>
+    """)
 
 ## Create Nodes.xml
 dest_folder = dest_folder + "Resources/"
-nodes = open(dest_folder + "Nodes.xml", "w")
-nodes.write("""<?xml version="1.0" encoding="UTF-8"?>
-<DocSetNodes version="1.0">
-    <TOC>
-        <Node type="folder">
-            <Name>Modules Index</Name>
-            <Path>%s</Path>
-        </Node>
-    </TOC>
-</DocSetNodes>
-""" % modindex_path)
-nodes.close()
+with open(dest_folder + "Nodes.xml", "w") as nodes:
+    nodes.write("""<?xml version="1.0" encoding="UTF-8"?>
+    <DocSetNodes version="1.0">
+        <TOC>
+            <Node type="folder">
+                <Name>Package Index</Name>
+                <Path>%s</Path>
+            </Node>
+        </TOC>
+    </DocSetNodes>
+    """ % modindex_path)
+
 
 ## Create the tokens file
 tokens = open(dest_folder + "Tokens.xml", "w")
 dest_folder = dest_folder + "Documents/"
 
 ## Copy some static files
+# markedit i probably need to copy everything.... check on that though
 shutil.copy(source_folder + "searchindex.js", dest_folder)
 shutil.copy(source_folder + modindex_path, dest_folder)
 shutil.copy(source_folder + "genindex-all.html", dest_folder)
@@ -139,7 +159,7 @@ tokens.write("""<?xml version="1.0" encoding="UTF-8"?>
 ## Collect pages first
 pages = {}
 
-## Collect pages from the modules index
+## Collect pages from the package index
 f = open(source_folder + modindex_path, 'r')
 for line in f:
     search = re.search("<a href=\"(.*)#.*?\"><tt class=\"xref\">(.*?)</tt>", line)
@@ -149,7 +169,7 @@ for line in f:
         if not href in pages:
             pages[href] = []
 
-        apple_ref = "//apple_ref/cpp/cat/%s" % name
+        apple_ref = "//apple_ref/cpp/cat/%s" % name # add entry for category (aka python module)
         pages[href].append(apple_ref)
 
 f.close()
@@ -160,7 +180,8 @@ for line in f:
     for search in re.finditer("(<dt>|, )<a href=\"([^#]+).*?\">", line):
         href = search.group(2)
         if not href in pages:
-            pages[href] = []
+            pages[href] = [] # NOTE FOR THESE , stuff gets added in the collect method, see below in the for in loop,
+                            # we just create the entry in the dictionary with the url and an empty list if its not there
 
 f.close()
 
@@ -170,8 +191,8 @@ for line in f:
     for search in re.finditer("<a class=\"reference external\" href=\"([^#\"]+).*?\">", line):
         href = "library/" + search.group(1)
         if not ("http://" in href or "https://" in href or href in pages):
-            pages[href] = []
-
+            pages[href] = [] # NOTE FOR THESE , stuff gets added in the collect method, see below in the for in loop
+                            # we just create the entry in the dictionary with the url and an empty list if its not there
 f.close()
 
 ## Now write to tokens
@@ -179,7 +200,7 @@ for href, names in pages.items():
 
     soup = BeautifulSoup(open(source_folder + href))
 
-    collect(soup, "class", "cl", names)
+    collect(soup, "class", "cl", names) # need to figure out what these do
     collect(soup, "method", "clm", names)
     collect(soup, "classmethod", "clm", names)
     collect(soup, "function", "func", names)
@@ -187,10 +208,10 @@ for href, names in pages.items():
     collect(soup, "attribute", "instp", names)
 
     if len(names) > 0:
-        tokens.write("<File path=\"%s\">\n" % href)
+        tokens.write("<File path=\"%s\">\n" % href) # each href,names pair is a file. The "file" is the href
         for name in names:
             tokens.write("\t<Token><TokenIdentifier>%s</TokenIdentifier><Anchor>%s</Anchor></Token>\n" % (name, name))
-        tokens.write("</File>\n")
+        tokens.write("</File>\n") # the names are the things inside each html file, classes, functions, etc
 
         newFile = dest_folder + href
         if not os.path.exists(os.path.dirname(newFile)):
