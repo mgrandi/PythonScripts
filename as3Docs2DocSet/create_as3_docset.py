@@ -20,6 +20,7 @@ import subprocess
 from bs4 import BeautifulSoup
 import argparse
 import sys
+import urllib.parse
 
 
 
@@ -73,23 +74,45 @@ def verify_outputpath(argString):
 
     return argString
 
-def is_something(tag, something):
-    """ Function to help BeautifulSoup find our tokens """
-    return (tag.name == "dt"
-            and tag.has_key("id")
-            and tag.parent.name == "dl"
-            and tag.parent['class'][0] == something)
+def isPagesLink(tag):
+    """ Function to help BeautifulSoup find the <a> tags that contain a href
+    to a page that we need to go through and parse. 
+    @param tag - the tag that BS4 gives us
+    @return boolean whether this is a tag we want or not."""
+    return (tag.name == "a" 
+        and tag.parent.has_attr("class") # short circut, if this is false we wont get keyerror on next line
+        and tag.parent["class"][0] == "idxrow" )# class can have more then one attribute, so we use list syntax here
+
+def getPagesFromIndex(soup, pagesDict):
+    ''' goes through a all-index-LETTER.html file and gets all the links from it
+    @param soup - the beautifulsoup object
+    @param pagesDict - the dictonary of pages that we are adding too.'''
+
+    # get the list of <a> tags whose href property we need to add to the dict
+    tagList = soup.find_all(lambda tag: isPagesLink(tag))
+    
+    for tmpTag in tagList:
+
+        # get the url, have to turn it into a list cause i can't set the fragment param on a ParseResult...grumble
+        urlList = list(urllib.parse.urlparse(tmpTag["href"]))
+
+        # clear the fragment
+        urlList[5] = ""
+
+        # resulting url without the fragment
+        result = urllib.parse.urlunparse(urlList)
+
+        # check to see if its in the dict already
+        if not result in pagesDict:
+            pagesDict[result] = [] # give it an empty list as a value for later on
 
 
-def collect(soup, what, identifier, names):
-    """ Collects all nodes of a certain type from a BeautifulSoup document """
-    whats = soup.find_all(lambda tag: is_something(tag, what))
-    for n in whats:
+    '''for n in whats:
         apple_ref = "//apple_ref/cpp/{}/{}".format(identifier, n["id"])
         new_tag = soup.new_tag("a")
         new_tag['name'] = apple_ref
         n.insert_before(new_tag)
-        names.append(apple_ref)
+        names.append(apple_ref)'''
 
 def trouble(message):
     ''' prints an error message and exits with status 1
@@ -177,8 +200,6 @@ def makeDocset(args):
 
     documentsFolder = os.path.join(resourcesFolder ,"Documents")
 
-    # copy the entire langref folder over. This creates "Documents"
-    shutil.copytree(sourceFolder, documentsFolder)
 
     ## I'll hide the header because it makes no sense in a docset
     ## and messes up Dash
@@ -234,17 +255,25 @@ def makeDocset(args):
     for htmlFile in htmlPagesToParse:
 
         # the html files are inside the Documents folder. 
-        with open(os.path.join(documentsFolder, htmlFile), "r") as f:
+        with open(os.path.join(sourceFolder, htmlFile), "r") as f:
 
             # create the soup
             soup = BeautifulSoup(f)
 
-            # get all the <td> tags that have the class name "idxrow", which contains as a child stuff we want. 
-            tmpList = soup.find_all("td", {"class": "idxrow"})
+            getPagesFromIndex(soup, pages)
 
-            for tag in tmpList:
 
-                print(tag)
+    import pprint
+    pprint.pprint(pages)
+
+    '''
+    # get all the <td> tags that have the class name "idxrow", which contains as a child stuff we want. 
+    tmpList = soup.find_all("td", {"class": "idxrow"})
+
+    for tag in tmpList:
+
+        print(tag)
+    '''
 
 
 
