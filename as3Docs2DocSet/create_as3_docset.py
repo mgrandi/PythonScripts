@@ -248,10 +248,11 @@ def makeDocset(args):
 
     # dictionary that will hold the pages
     # key is the html files path, and value is a list of 
-    # strings that will will be of the format //apple_ref/language/type/name
-    # that identifies the various classes, properties, styles, etc inside each html file.
+    # tuple objects, the first value is the strings that will will be of the format //apple_ref/language/type/name
+    # that identifies the various classes, properties, styles, etc inside each html file. The second is the 'anchor'
     pages = {}
 
+    # get all the pages that we need to parse
     for htmlFile in htmlPagesToParse:
 
         # the html files are inside the Documents folder. 
@@ -263,17 +264,74 @@ def makeDocset(args):
             getPagesFromIndex(soup, pages)
 
 
-    import pprint
-    pprint.pprint(pages)
+    # now we need to iterate through the pages dictionary and parse each 'pageLink',
+    # adding the token string to the list that is the value for every key in the pages dict
+    # the things that go in the list are the '//apple_ref/cpp/func/PyByteArray_FromObject'
+    # type strings. see http://kapeli.com/docsets/
+    #
+    # Type Mappings:
+    #
+    # Constant Static Property -> constant (clconst)
+    # Property-> property (instp)
+    # Skin Part -> property (clconst)
+    # Event -> binding (binding)
+    # Class -> class (cl)
+    # method -> method (clm)
+    # Interface, package -> interface (intf)
+    # Style -> property (clconst)
+    # Package Function -> function (func)
+    for pageLink, tokenStringList in pages.items():
 
-    '''
-    # get all the <td> tags that have the class name "idxrow", which contains as a child stuff we want. 
-    tmpList = soup.find_all("td", {"class": "idxrow"})
+        with open(os.path.join(sourceFolder, pageLink), "r") as f:
 
-    for tag in tmpList:
+            print("opening {}".format(pageLink))
 
-        print(tag)
-    '''
+            soup = BeautifulSoup(f)
+
+            # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
+            # this also seems to have a "non breaking backspace" at the end....strip it off
+            pageName = str(soup.find(lambda tag: tag.name == "convert" 
+                and tag.parent is not None
+                and tag.parent.has_attr("id")
+                and tag.parent["id"] == "subTitle").string).strip()
+
+            # **************************
+            # properties
+            # **************************
+
+            # get the table tag first
+            propertyTableTag = soup.find(lambda tag: tag.name == "table" and 
+                tag.has_attr("id") and tag["id"] == "summaryTableProperty")
+
+            # only continue if we actually have a table tag (and therefore properties)
+            if propertyTableTag is not None:
+                # find descendants of the table that match what we want
+                propList = propertyTableTag.findAll(lambda tag: tag.name == "a" 
+                    and tag.has_attr("class")
+                    and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
+                    and tag.parent.name == "td"  # make sure we have the right parent
+                    and tag.parent.has_attr("class") 
+                    and "summaryTableSignatureCol" in tag.parent["class"] 
+                    and tag.parent.parent is not None # we don't want hidden properties. (next three lines)
+                    and tag.parent.parent.has_attr("class") 
+                    and "hideInheritedProperty" not in tag.parent.parent["class"])
+
+                for tmpProperty in propList:
+
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    tmp = ("//apple_ref/language/clconst/{}".format(pageName + "." + str(tmpProperty.string)), tmpProperty["href"].lstrip("#"))
+                    tokenStringList.append(tmp)
+
+
+            import pprint
+            pprint.pprint(tokenStringList)
+            break
+
+            # do stuff with descendants
+
+            # TODO make sure we use "in" for the class stuff since it returns a list
+    
 
 
 
