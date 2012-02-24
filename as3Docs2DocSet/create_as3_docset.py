@@ -273,16 +273,20 @@ def makeDocset(args):
     #
     # Constant Static Property -> constant (clconst)
     # Property-> property (instp)
+    # protected properties -> property (instp)
     # Skin Part -> property (clconst)
     # Event -> binding (binding)
     # Class -> class (cl)
     # method -> method (clm)
+    # protected method -> method (clm)
     # Interface, package -> interface (intf)
     # Style -> property (clconst)
+    # mobile theme styles -> property (clconst)
     # Package Function -> function (func)
     for pageLink, tokenStringList in pages.items():
 
-        with open(os.path.join(sourceFolder, pageLink), "r") as f:
+        #with open(os.path.join(sourceFolder, pageLink), "r") as f:
+        with open(os.path.join(sourceFolder, "spark/components/Button.html"), "r") as f:
 
             print("opening {}".format(pageLink))
 
@@ -322,16 +326,46 @@ def makeDocset(args):
 
                     # convert NavigableString to a str object
                     # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/language/clconst/{}".format(pageName + "." + str(tmpProperty.string)), tmpProperty["href"].lstrip("#"))
+                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpProperty.string)), tmpProperty["href"].lstrip("#"))
                     tokenStringList.append(tmp)
 
+            # **************************
+            # protected properties
+            # **************************
+
+
+            # get the table tag first. This code seems to be the same as the properties one, only with different ids
+            protPropertyTableTag = soup.find(lambda tag: tag.name == "table" 
+                and tag.has_attr("id") 
+                and tag["id"] == "summaryTableProtectedProperty")
+
+            # only continue if we actually have a table tag (and therefore properties)
+            if protPropertyTableTag is not None:
+                # find descendants of the table that match what we want
+                protPropList = protPropertyTableTag.findAll(lambda tag: tag.name == "a" 
+                    and tag.has_attr("class")
+                    and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
+                    and tag.parent is not None
+                    and tag.parent.name == "td"  # make sure we have the right parent
+                    and tag.parent.has_attr("class") 
+                    and "summaryTableSignatureCol" in tag.parent["class"] 
+                    and tag.parent.parent is not None # we don't want hidden properties. (next three lines)
+                    and tag.parent.parent.has_attr("class") 
+                    and "hideInheritedProtectedProperty" not in tag.parent.parent["class"])
+
+                for tmpProtProperty in protPropList:
+
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpProtProperty.string)), tmpProtProperty["href"].lstrip("#"))
+                    tokenStringList.append(tmp)
 
 
             # **************************
             # methods
             # **************************
 
-            # get table tag for methods
+            # get table tag for protected methods
             methodTableTag = soup.find(lambda tag: tag.name == "table"
                 and tag.has_attr("id")
                 and tag["id"] == "summaryTableMethod")
@@ -356,25 +390,125 @@ def makeDocset(args):
                     # TODO break this off into a method?
                     # convert NavigableString to a str object
                     # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/language/clm/{}".format(pageName + "." + str(tmpMethod.string)), tmpMethod["href"].lstrip("#"))
+                    tmp = ("//apple_ref/cpp/clm/{}".format(pageName + "." + str(tmpMethod.string)), tmpMethod["href"].lstrip("#"))
                     tokenStringList.append(tmp)
 
             # **************************
             # protected methods
             # **************************
 
+            # get table tag for methods. The following code is pretty much the same as the "methods" only with different ID's and such
+            protMethodTableTag = soup.find(lambda tag: tag.name == "table"
+                and tag.has_attr("id")
+                and tag["id"] == "summaryTableProtectedMethod")
+
+            # make sure we actually have methods
+            if protMethodTableTag is not None:
+
+                protMethodList = protMethodTableTag.findAll(lambda tag: tag.name == "a"
+                    and tag.has_attr("class") 
+                    and "signatureLink" in tag["class"]
+                    and tag.parent is not None
+                    and tag.parent.has_attr("class")
+                    and "summarySignature" in tag.parent["class"]
+                    and tag.parent.parent is not None # make sure we don't get none error
+                    and tag.parent.parent.parent is not None # make sure we don't get non error
+                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                    and tag.parent.parent.parent.has_attr("class")
+                    and "hideInheritedProtectedMethod" not in tag.parent.parent.parent["class"])
+
+                for tmpProtMethod in protMethodList:
+
+                    # TODO break this off into a method?
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    tmp = ("//apple_ref/cpp/clm/{}".format(pageName + "." + str(tmpProtMethod.string)), tmpProtMethod["href"].lstrip("#"))
+                    tokenStringList.append(tmp)
+
 
             # **************************
             # events
             # **************************
 
+            # seems to be the same as methods, with it being inside a div instead of the td
+
+            # get table tag
+            eventTableTag = soup.find(lambda tag: tag.name == "table"
+                and tag.has_attr("id")
+                and tag["id"] == "summaryTableEvent")
+
+            # make sure we actually have events
+            if eventTableTag is not None:
+
+                eventList = eventTableTag.findAll(lambda tag: tag.name == "a"
+                    and tag.has_attr("class") 
+                    and "signatureLink" in tag["class"]
+                    and tag.parent is not None
+                    and tag.parent.has_attr("class")
+                    and "summarySignature" in tag.parent["class"]
+                    and tag.parent.parent is not None # make sure we don't get none error
+                    and tag.parent.parent.parent is not None # make sure we don't get non error
+                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                    and tag.parent.parent.parent.has_attr("class")
+                    and "hideInheritedEvent" not in tag.parent.parent.parent["class"])
+
+                for tmpEvent in eventList:
+
+                    # TODO break this off into a method?
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    tmp = ("//apple_ref/cpp/binding/{}".format(pageName + "." + str(tmpEvent.string)), tmpEvent["href"].lstrip("#"))
+                    tokenStringList.append(tmp)
+
             # **************************
             # styles
             # **************************
 
+            # seems to be the same as methods, with it being inside a div instead of the td
+
+            # NOTE: the styles don't have links, unless they are inherited. since we don't care about inherited styles
+            # then we just get the non link ones which are in <span> tags. However, they do have anchors builtin,
+            # which are just of the form "style:stylename"
+
+            # get table tag
+            styleTwoTableTag = soup.find(lambda tag: tag.name == "table"
+                and tag.has_attr("id")
+                and tag["id"] == ("summaryTablecommonStyle" or "summaryTablesparkStyle" or "summaryTablemobileStyle"))
+
+            # make sure we actually have styles
+            if styleTwoTableTag is not None:
+
+                styleTwoList = styleTwoTableTag.findAll(lambda tag: tag.name == "span"
+                    and tag.has_attr("class") 
+                    and "signatureLink" in tag["class"]
+                    and tag.parent is not None
+                    and tag.parent.has_attr("class")
+                    and "summarySignature" in tag.parent["class"]
+                    and tag.parent.parent is not None # make sure we don't get none error
+                    and tag.parent.parent.parent is not None # make sure we don't get non error
+                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                    and tag.parent.parent.parent.has_attr("class")
+                    and ("hideInheritedcommonStyle" or "hideInheritedmobileStyle" or "hideInheritedsparkStyle") not in tag.parent.parent.parent["class"])
+
+                for tmpStyleTwo in styleTwoList:
+
+                    # TODO break this off into a method?
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    # we get the anchor by just adding "style:" to the style's name. that way we don't have to find another tag.
+                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpStyleTwo.string)), "style:" + str(tmpStyleTwo.string))
+                    tokenStringList.append(tmp)
+
+
             # **************************
             # skin parts
             # **************************
+
+            # seems to be the same as methods, with it being inside a div instead of the td
+
+            # NOTE: the skin parts don't have links, unless they are inherited. since we don't care about inherited styles
+            # then we just get the non link ones which are in <span> tags. However, they do have anchors builtin,
+            # which are just of the form "SkinPart:stylename"
 
             # **************************
             # skin states
