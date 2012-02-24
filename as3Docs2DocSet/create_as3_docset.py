@@ -300,8 +300,9 @@ def makeDocset(args):
             # **************************
 
             # get the table tag first
-            propertyTableTag = soup.find(lambda tag: tag.name == "table" and 
-                tag.has_attr("id") and tag["id"] == "summaryTableProperty")
+            propertyTableTag = soup.find(lambda tag: tag.name == "table" 
+                and tag.has_attr("id") 
+                and tag["id"] == "summaryTableProperty")
 
             # only continue if we actually have a table tag (and therefore properties)
             if propertyTableTag is not None:
@@ -309,6 +310,7 @@ def makeDocset(args):
                 propList = propertyTableTag.findAll(lambda tag: tag.name == "a" 
                     and tag.has_attr("class")
                     and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
+                    and tag.parent is not None
                     and tag.parent.name == "td"  # make sure we have the right parent
                     and tag.parent.has_attr("class") 
                     and "summaryTableSignatureCol" in tag.parent["class"] 
@@ -323,6 +325,68 @@ def makeDocset(args):
                     tmp = ("//apple_ref/language/clconst/{}".format(pageName + "." + str(tmpProperty.string)), tmpProperty["href"].lstrip("#"))
                     tokenStringList.append(tmp)
 
+
+
+            # **************************
+            # methods
+            # **************************
+
+            # get table tag for methods
+            methodTableTag = soup.find(lambda tag: tag.name == "table"
+                and tag.has_attr("id")
+                and tag["id"] == "summaryTableMethod")
+
+            # make sure we actually have methods
+            if methodTableTag is not None:
+
+                methodList = methodTableTag.findAll(lambda tag: tag.name == "a"
+                    and tag.has_attr("class") 
+                    and "signatureLink" in tag["class"]
+                    and tag.parent is not None
+                    and tag.parent.has_attr("class")
+                    and "summarySignature" in tag.parent["class"]
+                    and tag.parent.parent is not None # make sure we don't get none error
+                    and tag.parent.parent.parent is not None # make sure we don't get non error
+                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                    and tag.parent.parent.parent.has_attr("class")
+                    and "hideInheritedMethod" not in tag.parent.parent.parent["class"])
+
+                for tmpMethod in methodList:
+
+                    # TODO break this off into a method?
+                    # convert NavigableString to a str object
+                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+                    tmp = ("//apple_ref/language/clm/{}".format(pageName + "." + str(tmpMethod.string)), tmpMethod["href"].lstrip("#"))
+                    tokenStringList.append(tmp)
+
+            # **************************
+            # protected methods
+            # **************************
+
+
+            # **************************
+            # events
+            # **************************
+
+            # **************************
+            # styles
+            # **************************
+
+            # **************************
+            # skin parts
+            # **************************
+
+            # **************************
+            # skin states
+            # **************************
+
+            # **************************
+            # effects
+            # **************************
+
+            # **************************
+            # constants
+            # **************************
 
             import pprint
             pprint.pprint(tokenStringList)
