@@ -18,6 +18,7 @@ import os.path
 import shutil
 import subprocess
 from bs4 import BeautifulSoup
+import bs4
 import argparse
 import sys
 import urllib.parse
@@ -43,6 +44,7 @@ def verify_docpath(argString):
 
             success = False
 
+            # TODO REFACTOR THIS, USE BS4 NOT JUST STRAIGHT UP LINE SEARCHING
             # see if we can find that line. if we do, break out of the loop and keep going. if not, print error and exit
             for line in f:
                 search = re.search("ActionScript&reg; 3.0 Reference for the Adobe&reg; Flash&reg; Platform", line)
@@ -106,13 +108,171 @@ def getPagesFromIndex(soup, pagesDict):
         if not result in pagesDict:
             pagesDict[result] = [] # give it an empty list as a value for later on
 
+    
+def getTableTag(tableId, soup):
+    ''' gets a <table> tag from the bs4 soup with a specified id.
 
-    '''for n in whats:
-        apple_ref = "//apple_ref/cpp/{}/{}".format(identifier, n["id"])
-        new_tag = soup.new_tag("a")
-        new_tag['name'] = apple_ref
-        n.insert_before(new_tag)
-        names.append(apple_ref)'''
+    @param tableId - the id of the table that we want. this can either be a string or a list,
+        if its a list, then we use all of the entries. 
+    @param soup - the bs4 soup object we are looking for, the html page
+    @return the <table> tag or none.'''
+
+    return soup.find(lambda tag: tag.name == "table" 
+            and tag.has_attr("id") 
+            and tag["id"] in tableId) # this works if its a string or a list. 
+
+def getTagListFormatOne(tableTag, tagToSearchFor, hiddenId):
+    '''this method gets a list of html tags that are inside a <table> and are
+    of the following format:
+    <table>
+        <tr>
+            <td>
+                <a> (or whatever tag)
+
+    @param tableTag - the <table> html tag that we are searching for methods,properties, whatever
+    @param tagToSearchFor - the tag's name to search for as a string. 
+    @param hiddenId - the "id" of the <tr> tags that specifies that the whatever is hidden (as in inherited)
+        and we don't want to include it.
+    @return a list of BS4 tag objects.'''
+
+    # make sure we have the right object
+    if tableTag.name == "table" and isinstance(tableTag, bs4.element.Tag):
+
+        # find descendants of the table that match what we want
+        tmpList = tableTag.findAll(lambda tag: tag.name == tagToSearchFor 
+            and tag.has_attr("class")
+            and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
+            and tag.parent is not None
+            and tag.parent.name == "td"  # make sure we have the right parent
+            and tag.parent.has_attr("class") 
+            and "summaryTableSignatureCol" in tag.parent["class"] 
+            and tag.parent.parent is not None # we don't want hidden properties. (next three lines)
+            and tag.parent.parent.has_attr("class") 
+            and hiddenId not in tag.parent.parent["class"])
+
+        return tmpList
+
+    else:
+
+        raise ValueError("getTagListFormatOne(): the tableTag param was none or not a <table> tag! it was: {}".format(tableTag))
+
+def getTagListFormatTwo(tableTag, tagToSearchFor, hiddenId):
+    '''this method gets a list of html tags that are inside a <table> and are
+    of the following format:
+    <table>
+        <tr>
+            <td>
+                <div> <-----(difference from format 1 here)
+                    <a> (or whatever tag)        
+
+    @param tableTag - the <table> html tag that we are searching for methods,properties, whatever
+    @param tagToSearchFor - the tag's name to search for as a string. 
+    @param hiddenId - the "id" of the <tr> tags that specifies that the whatever is hidden (as in inherited)
+        and we don't want to include it. can be a string or a list. 
+    @return a list of BS4 tag objects.'''
+
+    if tableTag.name == "table" and isinstance(tableTag, bs4.element.Tag):
+
+        tmpList = None
+
+        # if its a list then we have to have special syntax since we can't see if an array is inside an array
+        if isinstance(hiddenId, list):
+
+            tmpList = tableTag.findAll(lambda tag: tag.name == tagToSearchFor
+                and tag.has_attr("class") 
+                and "signatureLink" in tag["class"]
+                and tag.parent is not None
+                and tag.parent.has_attr("class")
+                and "summarySignature" in tag.parent["class"]
+                and tag.parent.parent is not None # make sure we don't get none error
+                and tag.parent.parent.parent is not None # make sure we don't get non error
+                and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                and tag.parent.parent.parent.has_attr("class")
+                and x not in tag.parent.parent["class"] for x in hiddenId)
+
+        else:
+
+            # just a string, we can do it the normal way.
+            tmpList = tableTag.findAll(lambda tag: tag.name == tagToSearchFor
+                and tag.has_attr("class") 
+                and "signatureLink" in tag["class"]
+                and tag.parent is not None
+                and tag.parent.has_attr("class")
+                and "summarySignature" in tag.parent["class"]
+                and tag.parent.parent is not None # make sure we don't get none error
+                and tag.parent.parent.parent is not None # make sure we don't get non error
+                and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
+                and tag.parent.parent.parent.has_attr("class")
+                and hiddenId not in tag.parent.parent.parent["class"])
+
+        return tmpList
+
+    else:
+
+        raise ValueError("getTagListFormatTwo() the tableTag param was not a <table> tag! it was: {}".format(tableTag))
+
+def addATagsToTokenList(tagList, refType, pageName, tokenList):
+    '''this method adds <a> tags to the list of tuples that we are going to 
+    serialize into the tokens.xml file. Here, the a tags are like:
+
+    <a href="#label" class="signatureLink">label</a>
+
+    the href is the anchor, and the text is the name of the property/method/whatever.
+
+    @param tagList - a list of the html tags that we are getting info out of and adding to the tokenList
+    @param refType - the reftype for this tag for entry into tokens.xml, see http://kapeli.com/docsets/
+    @param pageName - name of the page we are on 
+    @param tokenList - the list of tuples that we are adding the entry to. the tuple is of the format
+        (refString, anchor)
+    '''
+
+    for tag in tagList:
+
+        if tag.name =="a" and isinstance(tag, bs4.element.Tag):
+
+            # convert NavigableString to a str object
+            # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
+            tmp = ("//apple_ref/cpp/{}/{}".format(refType, pageName + "." + str(tag.string)), tag["href"].lstrip("#"))
+            tokenList.append(tmp)
+
+        else:
+
+            raise ValueError("addATagsToTokenList(): one of the entries in the list was not a tag obj or not a <a> tag! it was: {}".format(tag))
+
+
+def addSpanTagsToTokenList(tagList, refType, pageName, anchorPrefix, tokenList):
+    ''' this method adds <span> tags to the list of tuples that we are going to
+    serialize into the tokens.xml file. Here, the tags look like:
+
+    <span class="signatureLink">disabled</span>
+
+    Notice how they don't have an anchor, because they are not <a> tags (duh). these
+    actually have anchors further up the html heirarchy, but we don't need to get them
+    as they are just <some prefix>:<tag name>, so we just pass in the prefix and we can
+    generate the name easily.
+
+    @param tag - a list of the html tags that we are getting info out of and adding to the tokenList
+    @param refType - the reftype for this tag for entry into tokens.xml, see http://kapeli.com/docsets/
+    @param anchorPrefix - since span tags don't have the anchor inside them, this is the prefix that we 
+        add to the tag's string to make the anchor
+    @param pageName - name of the page we are on
+    @param tokenList - the list of tuples that we are adding the entry to. the tuple is of the format
+        (refString, anchor)
+    '''
+
+    for tag in tagList:
+
+        if tag.name =="span" and isinstance(tag, bs4.element.Tag):
+
+            # convert NavigableString to a str object
+            # since we dont have a href we need to create the anchor by adding the anchorPrefix + : + the tag's string value
+            tmp = ("//apple_ref/cpp/{}/{}".format(refType, pageName + "." + str(tag.string)), "{}:{}".format(anchorPrefix, str(tag.string)))
+            tokenList.append(tmp)
+
+        else:
+
+            raise ValueError("addSpanTagsToTokenList(): one of the entries in the list was not a tag obj or not a <span> tag! it was: {}".format(tag))
+
 
 def trouble(message):
     ''' prints an error message and exits with status 1
@@ -283,13 +443,14 @@ def makeDocset(args):
     # Style -> property (clconst)
     # mobile theme styles -> property (clconst)
     # Package Function -> function (func)
-    for pageLink, tokenStringList in pages.items():
+    for pageLink, tokenList in pages.items():
 
         #with open(os.path.join(sourceFolder, pageLink), "r") as f:
-        with open(os.path.join(sourceFolder, "spark/components/Button.html"), "r") as f:
+        with open(os.path.join(sourceFolder, "spark/components/supportClasses/ButtonBase.html"), "r") as f:
 
             print("opening {}".format(pageLink))
 
+            # make the beautifulsoup object that reprsents the html
             soup = BeautifulSoup(f)
 
             # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
@@ -303,62 +464,32 @@ def makeDocset(args):
             # properties
             # **************************
 
-            # get the table tag first
-            propertyTableTag = soup.find(lambda tag: tag.name == "table" 
-                and tag.has_attr("id") 
-                and tag["id"] == "summaryTableProperty")
+            # get the table tag 
+            propertyTableTag = getTableTag("summaryTableProperty", soup)
 
-            # only continue if we actually have a table tag (and therefore properties)
-            if propertyTableTag is not None:
-                # find descendants of the table that match what we want
-                propList = propertyTableTag.findAll(lambda tag: tag.name == "a" 
-                    and tag.has_attr("class")
-                    and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
-                    and tag.parent is not None
-                    and tag.parent.name == "td"  # make sure we have the right parent
-                    and tag.parent.has_attr("class") 
-                    and "summaryTableSignatureCol" in tag.parent["class"] 
-                    and tag.parent.parent is not None # we don't want hidden properties. (next three lines)
-                    and tag.parent.parent.has_attr("class") 
-                    and "hideInheritedProperty" not in tag.parent.parent["class"])
+            if propertyTableTag:
+                # get the tag list
+                propList = getTagListFormatOne(propertyTableTag, "a", "hideInheritedProperty")
 
-                for tmpProperty in propList:
-
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpProperty.string)), tmpProperty["href"].lstrip("#"))
-                    tokenStringList.append(tmp)
-
+                # add it to tokenlist
+                addATagsToTokenList(propList, "clconst", pageName, tokenList)
+            
             # **************************
             # protected properties
             # **************************
 
 
             # get the table tag first. This code seems to be the same as the properties one, only with different ids
-            protPropertyTableTag = soup.find(lambda tag: tag.name == "table" 
-                and tag.has_attr("id") 
-                and tag["id"] == "summaryTableProtectedProperty")
+            protPropertyTableTag = getTableTag("summaryTableProtectedProperty", soup)
 
             # only continue if we actually have a table tag (and therefore properties)
-            if protPropertyTableTag is not None:
-                # find descendants of the table that match what we want
-                protPropList = protPropertyTableTag.findAll(lambda tag: tag.name == "a" 
-                    and tag.has_attr("class")
-                    and "signatureLink" in tag["class"] # want the signature link, not the 'type' link (like link to Boolean)
-                    and tag.parent is not None
-                    and tag.parent.name == "td"  # make sure we have the right parent
-                    and tag.parent.has_attr("class") 
-                    and "summaryTableSignatureCol" in tag.parent["class"] 
-                    and tag.parent.parent is not None # we don't want hidden properties. (next three lines)
-                    and tag.parent.parent.has_attr("class") 
-                    and "hideInheritedProtectedProperty" not in tag.parent.parent["class"])
+            if protPropertyTableTag:
 
-                for tmpProtProperty in protPropList:
+                # get as list
+                protPropList = getTagListFormatOne(protPropertyTableTag, "a", "hideInheritedProtectedProperty")
 
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpProtProperty.string)), tmpProtProperty["href"].lstrip("#"))
-                    tokenStringList.append(tmp)
+                # add to token list
+                addATagsToTokenList(protPropList, "clconst", pageName, tokenList)
 
 
             # **************************
@@ -366,139 +497,67 @@ def makeDocset(args):
             # **************************
 
             # get table tag for protected methods
-            methodTableTag = soup.find(lambda tag: tag.name == "table"
-                and tag.has_attr("id")
-                and tag["id"] == "summaryTableMethod")
+            methodTableTag = getTableTag("summaryTableMethod", soup)
 
             # make sure we actually have methods
-            if methodTableTag is not None:
+            if methodTableTag:
 
-                methodList = methodTableTag.findAll(lambda tag: tag.name == "a"
-                    and tag.has_attr("class") 
-                    and "signatureLink" in tag["class"]
-                    and tag.parent is not None
-                    and tag.parent.has_attr("class")
-                    and "summarySignature" in tag.parent["class"]
-                    and tag.parent.parent is not None # make sure we don't get none error
-                    and tag.parent.parent.parent is not None # make sure we don't get non error
-                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
-                    and tag.parent.parent.parent.has_attr("class")
-                    and "hideInheritedMethod" not in tag.parent.parent.parent["class"])
+                # get as list
+                methodList = getTagListFormatTwo(methodTableTag, "a", "hideInheritedMethod")
 
-                for tmpMethod in methodList:
-
-                    # TODO break this off into a method?
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/cpp/clm/{}".format(pageName + "." + str(tmpMethod.string)), tmpMethod["href"].lstrip("#"))
-                    tokenStringList.append(tmp)
+                # add to token list
+                addATagsToTokenList(methodList, "clm", pageName, tokenList)
+                
 
             # **************************
             # protected methods
             # **************************
 
             # get table tag for methods. The following code is pretty much the same as the "methods" only with different ID's and such
-            protMethodTableTag = soup.find(lambda tag: tag.name == "table"
-                and tag.has_attr("id")
-                and tag["id"] == "summaryTableProtectedMethod")
+            protMethodTableTag = getTableTag("summaryTableProtectedMethod", soup)
 
-            # make sure we actually have methods
-            if protMethodTableTag is not None:
+            # make sure we actually have protected methods
+            if protMethodTableTag:
 
-                protMethodList = protMethodTableTag.findAll(lambda tag: tag.name == "a"
-                    and tag.has_attr("class") 
-                    and "signatureLink" in tag["class"]
-                    and tag.parent is not None
-                    and tag.parent.has_attr("class")
-                    and "summarySignature" in tag.parent["class"]
-                    and tag.parent.parent is not None # make sure we don't get none error
-                    and tag.parent.parent.parent is not None # make sure we don't get non error
-                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
-                    and tag.parent.parent.parent.has_attr("class")
-                    and "hideInheritedProtectedMethod" not in tag.parent.parent.parent["class"])
+                # get as list
+                protMethodList = getTagListFormatTwo(protMethodTableTag, "a", "hideInheritedProtectedMethod")
 
-                for tmpProtMethod in protMethodList:
-
-                    # TODO break this off into a method?
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/cpp/clm/{}".format(pageName + "." + str(tmpProtMethod.string)), tmpProtMethod["href"].lstrip("#"))
-                    tokenStringList.append(tmp)
+                # add to token list
+                addATagsToTokenList(protMethodList, "clm", pageName, tokenList)
 
 
             # **************************
             # events
             # **************************
 
-            # seems to be the same as methods, with it being inside a div instead of the td
-
             # get table tag
-            eventTableTag = soup.find(lambda tag: tag.name == "table"
-                and tag.has_attr("id")
-                and tag["id"] == "summaryTableEvent")
+            eventTableTag = getTableTag("summaryTableEvent", soup)
 
             # make sure we actually have events
-            if eventTableTag is not None:
+            if eventTableTag:
 
-                eventList = eventTableTag.findAll(lambda tag: tag.name == "a"
-                    and tag.has_attr("class") 
-                    and "signatureLink" in tag["class"]
-                    and tag.parent is not None
-                    and tag.parent.has_attr("class")
-                    and "summarySignature" in tag.parent["class"]
-                    and tag.parent.parent is not None # make sure we don't get none error
-                    and tag.parent.parent.parent is not None # make sure we don't get non error
-                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
-                    and tag.parent.parent.parent.has_attr("class")
-                    and "hideInheritedEvent" not in tag.parent.parent.parent["class"])
+                # get as list
+                eventList = getTagListFormatTwo(eventTableTag, "a", "hideInheritedEvent")
 
-                for tmpEvent in eventList:
+                # add to token list
+                addATagsToTokenList(eventList, "binding", pageName, tokenList)
 
-                    # TODO break this off into a method?
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    tmp = ("//apple_ref/cpp/binding/{}".format(pageName + "." + str(tmpEvent.string)), tmpEvent["href"].lstrip("#"))
-                    tokenStringList.append(tmp)
 
             # **************************
             # styles
             # **************************
 
-            # seems to be the same as methods, with it being inside a div instead of the td
-
-            # NOTE: the styles don't have links, unless they are inherited. since we don't care about inherited styles
-            # then we just get the non link ones which are in <span> tags. However, they do have anchors builtin,
-            # which are just of the form "style:stylename"
-
-            # get table tag
-            styleTwoTableTag = soup.find(lambda tag: tag.name == "table"
-                and tag.has_attr("id")
-                and tag["id"] == ("summaryTablecommonStyle" or "summaryTablesparkStyle" or "summaryTablemobileStyle"))
+            # get tables tag ( three of them)
+            styleTableTag = getTableTag(["summaryTablecommonStyle", "summaryTablesparkStyle", "summaryTablemobileStyle"], soup)
 
             # make sure we actually have styles
-            if styleTwoTableTag is not None:
+            if styleTableTag:
 
-                styleTwoList = styleTwoTableTag.findAll(lambda tag: tag.name == "span"
-                    and tag.has_attr("class") 
-                    and "signatureLink" in tag["class"]
-                    and tag.parent is not None
-                    and tag.parent.has_attr("class")
-                    and "summarySignature" in tag.parent["class"]
-                    and tag.parent.parent is not None # make sure we don't get none error
-                    and tag.parent.parent.parent is not None # make sure we don't get non error
-                    and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
-                    and tag.parent.parent.parent.has_attr("class")
-                    and ("hideInheritedcommonStyle" or "hideInheritedmobileStyle" or "hideInheritedsparkStyle") not in tag.parent.parent.parent["class"])
+                # get as list, where we exclude all elements whose class is in our list
+                styleTwoList = getTagListFormatTwo(styleTableTag, "span", ["hideInheritedcommonStyle", "hideInheritedmobileStyle", "hideInheritedsparkStyle"])
 
-                for tmpStyleTwo in styleTwoList:
-
-                    # TODO break this off into a method?
-                    # convert NavigableString to a str object
-                    # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-                    # we get the anchor by just adding "style:" to the style's name. that way we don't have to find another tag.
-                    tmp = ("//apple_ref/cpp/clconst/{}".format(pageName + "." + str(tmpStyleTwo.string)), "style:" + str(tmpStyleTwo.string))
-                    tokenStringList.append(tmp)
-
+                # add to token list. note these are span tags so we need a diff method
+                addSpanTagsToTokenList(styleTwoList, "clconst", "style", pageName, tokenList)
 
             # **************************
             # skin parts
@@ -523,15 +582,12 @@ def makeDocset(args):
             # **************************
 
             import pprint
-            pprint.pprint(tokenStringList)
+            pprint.pprint(tokenList)
             break
 
             # do stuff with descendants
 
             # TODO make sure we use "in" for the class stuff since it returns a list
-    
-
-
 
     '''
 
@@ -586,4 +642,8 @@ if __name__ == "__main__":
     parser.add_argument('--outputPath', help="the directory to place the resulting .docset. defaults to os.getcwd()", type=verify_outputpath, default=os.getcwd())
     args = parser.parse_args()
 
-    makeDocset(args)
+    try:
+        makeDocset(args)
+    except Exception as e:
+
+        trouble("problem making the docset: error was: {}".format(e))
