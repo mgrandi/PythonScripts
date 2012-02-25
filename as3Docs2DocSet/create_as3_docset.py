@@ -434,19 +434,21 @@ def makeDocset(args):
     # Constant Static Property -> constant (clconst)
     # Property-> property (instp)
     # protected properties -> property (instp)
-    # Skin Part -> property (clconst)
+    # Skin Part -> property (instp)
+    # skin states -> property (instp)
+    # effects -> property (instp)
     # Event -> binding (binding)
     # Class -> class (cl)
     # method -> method (clm)
     # protected method -> method (clm)
     # Interface, package -> interface (intf)
-    # Style -> property (clconst)
-    # mobile theme styles -> property (clconst)
+    # Style -> property (instp)
+    # mobile theme styles -> property (instp)
     # Package Function -> function (func)
     for pageLink, tokenList in pages.items():
 
         #with open(os.path.join(sourceFolder, pageLink), "r") as f:
-        with open(os.path.join(sourceFolder, "spark/components/supportClasses/ButtonBase.html"), "r") as f:
+        with open(os.path.join(sourceFolder, "mx/core/UIComponent.html"), "r") as f:
 
             print("opening {}".format(pageLink))
 
@@ -472,7 +474,7 @@ def makeDocset(args):
                 propList = getTagListFormatOne(propertyTableTag, "a", "hideInheritedProperty")
 
                 # add it to tokenlist
-                addATagsToTokenList(propList, "clconst", pageName, tokenList)
+                addATagsToTokenList(propList, "instp", pageName, tokenList)
             
             # **************************
             # protected properties
@@ -489,7 +491,7 @@ def makeDocset(args):
                 protPropList = getTagListFormatOne(protPropertyTableTag, "a", "hideInheritedProtectedProperty")
 
                 # add to token list
-                addATagsToTokenList(protPropList, "clconst", pageName, tokenList)
+                addATagsToTokenList(protPropList, "instp", pageName, tokenList)
 
 
             # **************************
@@ -554,32 +556,93 @@ def makeDocset(args):
             if styleTableTag:
 
                 # get as list, where we exclude all elements whose class is in our list
+                # here get span tags cause classes that have styles as links inherited them and we dont want 
+                # inherited stuff
                 styleTwoList = getTagListFormatTwo(styleTableTag, "span", ["hideInheritedcommonStyle", "hideInheritedmobileStyle", "hideInheritedsparkStyle"])
 
                 # add to token list. note these are span tags so we need a diff method
-                addSpanTagsToTokenList(styleTwoList, "clconst", "style", pageName, tokenList)
+                # anchors are in style of "style:SomethingHere"
+                addSpanTagsToTokenList(styleTwoList, "instp", pageName, "style", tokenList)
 
             # **************************
             # skin parts
             # **************************
 
-            # seems to be the same as methods, with it being inside a div instead of the td
+            # get table tag
+            skinPartTableTag = getTableTag("summaryTableSkinPart", soup)
 
-            # NOTE: the skin parts don't have links, unless they are inherited. since we don't care about inherited styles
-            # then we just get the non link ones which are in <span> tags. However, they do have anchors builtin,
-            # which are just of the form "SkinPart:stylename"
+            # if we have skin parts:
+            if skinPartTableTag:
+
+                # get as list
+                # here we only get span tags, cause the classes that have skin parts as links, have inherited the 
+                # skin parts from another class and we don't want inherited props
+                skinPartList = getTagListFormatTwo(skinPartTableTag, "span", "hideInheritedSkinPart")
+
+                # add to list
+                # anchor is in style of "SkinPart:SomethingHere"
+                addSpanTagsToTokenList(skinPartList, "instp", pageName, "SkinPart", tokenList)
 
             # **************************
             # skin states
             # **************************
 
+            # get table tag
+            skinStateTableTag = getTableTag("summaryTableSkinState", soup)
+
+            # if we have skin states
+            if skinStateTableTag:
+
+                # get as list
+                # here we only get span tags cause the classes that have skin states as links have inherited the 
+                # skin states from another class and we don't want inherited stuff
+                skinStateList = getTagListFormatTwo(skinStateTableTag, "span", "hideInheritedSkinState")
+
+                # add to list
+                # anchors are of the format "SkinState:SomethingHere"
+                addSpanTagsToTokenList(skinStateList, "instp", pageName, "SkinState" tokenList)
+
+
             # **************************
             # effects
             # **************************
 
+            # get table tag
+            effectTableTag = getTableTag("summaryTableEffect", soup)
+
+            # if we have effects
+            if effectTableTag:
+
+                # get as list
+                # here we only get span tags cause the classes that have effects as links have inherited the 
+                # effect from another class and we don't want inherited stuff
+                effectList = getTagListFormatTwo(effectTableTag, "span", "hideInheritedEffect")
+
+                # add to list
+                # anchors are of the format "effect:SomethingHere"
+                addSpanTagsToTokenList(effectList, "instp", pageName, "effect", tokenList)
+
             # **************************
             # constants
             # **************************
+
+            # get table tag
+            constTableTag = getTableTag("summaryTableConstant", soup)
+
+            # if we have constants:
+            if constTableTag:
+
+                # get as list
+                constList = getTagListFormatOne(constTableTag, "a", "hideInheritedConstant")
+
+                # add to list
+                addATagsToTokenList(constList, "clconst", pageName, tokenList)
+
+            # **************************
+            # package functions
+            # **************************
+
+            # these seem to be retrieved by the "method" thing. I think we are done....
 
             import pprint
             pprint.pprint(tokenList)
