@@ -188,7 +188,7 @@ def getTagListFormatTwo(tableTag, tagToSearchFor, hiddenId):
                 and tag.parent.parent.parent is not None # make sure we don't get non error
                 and tag.parent.parent.parent.name == "tr" # this is the element that has the 'hideWhatever' class
                 and tag.parent.parent.parent.has_attr("class")
-                and x not in tag.parent.parent["class"] for x in hiddenId)
+                and [x not in tag.parent.parent["class"] for x in hiddenId])
 
         else:
 
@@ -448,7 +448,7 @@ def makeDocset(args):
     for pageLink, tokenList in pages.items():
 
         #with open(os.path.join(sourceFolder, pageLink), "r") as f:
-        with open(os.path.join(sourceFolder, "mx/core/UIComponent.html"), "r") as f:
+        with open(os.path.join(sourceFolder, "package.html"), "r") as f:
 
             print("opening {}".format(pageLink))
 
@@ -460,7 +460,8 @@ def makeDocset(args):
             pageName = str(soup.find(lambda tag: tag.name == "convert" 
                 and tag.parent is not None
                 and tag.parent.has_attr("id")
-                and tag.parent["id"] == "subTitle").string).strip()
+                and tag.parent["id"] == "subTitle").string).strip().replace(" ", "_") # remove excess whitespace, turn space
+                                                                                    # into a _
 
             # **************************
             # properties
@@ -600,7 +601,7 @@ def makeDocset(args):
 
                 # add to list
                 # anchors are of the format "SkinState:SomethingHere"
-                addSpanTagsToTokenList(skinStateList, "instp", pageName, "SkinState" tokenList)
+                addSpanTagsToTokenList(skinStateList, "instp", pageName, "SkinState", tokenList)
 
 
             # **************************
