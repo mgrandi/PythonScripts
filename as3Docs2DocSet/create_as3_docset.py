@@ -669,7 +669,8 @@ def makeDocset(args):
     #   ... more <File> tags
 
     # bs4 object that will represent the xml file we are creating. 
-    tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?>
+    #tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?> # removing this line for now since bs4 is bugged
+    tokenSoup = BeautifulSoup('''
     <Tokens version="1.0"></Tokens>''', "xml")
 
     # the tag that are adding <File> tags too
@@ -711,7 +712,7 @@ def makeDocset(args):
     print("Creating {}".format(os.path.join(resourcesFolder, "Tokens.xml")))
     with open(os.path.join(resourcesFolder, "Tokens.xml"), "w", encoding="utf-8") as f:
 
-        f.write(str(soup))
+        f.write(str(tokenSoup))
 
 
     # call apple's docset utility
