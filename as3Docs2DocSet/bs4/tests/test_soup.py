@@ -3,10 +3,23 @@
 
 import unittest
 from bs4 import BeautifulSoup
-from bs4.element import SoupStrainer
+from bs4.element import (
+    SoupStrainer,
+    NamespacedAttribute,
+    )
+import bs4.dammit
 from bs4.dammit import EntitySubstitution, UnicodeDammit
-from bs4.testing import SoupTest
+from bs4.testing import (
+    SoupTest,
+    skipIf,
+)
 import warnings
+
+try:
+    import chardet
+    CHARDET_PRESENT = True
+except ImportError as e:
+    CHARDET_PRESENT = False
 
 class TestDeprecatedConstructorArguments(SoupTest):
 
@@ -16,7 +29,7 @@ class TestDeprecatedConstructorArguments(SoupTest):
         msg = str(w[0].message)
         self.assertTrue("parseOnlyThese" in msg)
         self.assertTrue("parse_only" in msg)
-        self.assertEquals(b"<b></b>", soup.encode())
+        self.assertEqual(b"<b></b>", soup.encode())
 
     def test_fromEncoding_renamed_to_from_encoding(self):
         with warnings.catch_warnings(record=True) as w:
@@ -25,7 +38,7 @@ class TestDeprecatedConstructorArguments(SoupTest):
         msg = str(w[0].message)
         self.assertTrue("fromEncoding" in msg)
         self.assertTrue("from_encoding" in msg)
-        self.assertEquals("utf8", soup.original_encoding)
+        self.assertEqual("utf8", soup.original_encoding)
 
     def test_unrecognized_keyword_argument(self):
         self.assertRaises(
@@ -103,6 +116,51 @@ class TestEntitySubstitution(unittest.TestCase):
         text = 'Bob\'s "bar"'
         self.assertEqual(self.sub.substitute_html(text), text)
 
+
+class TestEncodingConversion(SoupTest):
+    # Test Beautiful Soup's ability to decode and encode from various
+    # encodings.
+
+    def setUp(self):
+        super(TestEncodingConversion, self).setUp()
+        self.unicode_data = "<html><head></head><body><foo>Sacr\N{LATIN SMALL LETTER E WITH ACUTE} bleu!</foo></body></html>"
+        self.utf8_data = self.unicode_data.encode("utf-8")
+        # Just so you know what it looks like.
+        self.assertEqual(
+            self.utf8_data,
+            b"<html><head></head><body><foo>Sacr\xc3\xa9 bleu!</foo></body></html>")
+
+    def test_ascii_in_unicode_out(self):
+        # ASCII input is converted to Unicode. The original_encoding
+        # attribute is set.
+        ascii = b"<foo>a</foo>"
+        soup_from_ascii = self.soup(ascii)
+        unicode_output = soup_from_ascii.decode()
+        self.assertTrue(isinstance(unicode_output, str))
+        self.assertEqual(unicode_output, self.document_for(ascii.decode()))
+        self.assertEqual(soup_from_ascii.original_encoding, "ascii")
+
+    def test_unicode_in_unicode_out(self):
+        # Unicode input is left alone. The original_encoding attribute
+        # is not set.
+        soup_from_unicode = self.soup(self.unicode_data)
+        self.assertEqual(soup_from_unicode.decode(), self.unicode_data)
+        self.assertEqual(soup_from_unicode.foo.string, 'Sacr\xe9 bleu!')
+        self.assertEqual(soup_from_unicode.original_encoding, None)
+
+    def test_utf8_in_unicode_out(self):
+        # UTF-8 input is converted to Unicode. The original_encoding
+        # attribute is set.
+        soup_from_utf8 = self.soup(self.utf8_data)
+        self.assertEqual(soup_from_utf8.decode(), self.unicode_data)
+        self.assertEqual(soup_from_utf8.foo.string, 'Sacr\xe9 bleu!')
+
+    def test_utf8_out(self):
+        # The internal data structures can be encoded as UTF-8.
+        soup_from_unicode = self.soup(self.unicode_data)
+        self.assertEqual(soup_from_unicode.encode('utf-8'), self.utf8_data)
+
+
 class TestUnicodeDammit(unittest.TestCase):
     """Standalone tests of Unicode, Dammit."""
 
@@ -161,25 +219,68 @@ class TestUnicodeDammit(unittest.TestCase):
             b"<html><meta charset=euc-jp /></html>",
             b"<html><meta charset=euc-jp/></html>"):
             dammit = UnicodeDammit(data, is_html=True)
-            self.assertEquals(
+            self.assertEqual(
                 "euc-jp", dammit.original_encoding)
 
     def test_last_ditch_entity_replacement(self):
         # This is a UTF-8 document that contains bytestrings
-        # completely incompatible with UTF-8 (encoded with some other
+        # completely incompatible with UTF-8 (ie. encoded with some other
         # encoding).
         #
         # Since there is no consistent encoding for the document,
         # Unicode, Dammit will eventually encode the document as UTF-8
         # and encode the incompatible characters as REPLACEMENT
         # CHARACTER.
-
+        #
+        # If chardet is installed, it will detect that the document
+        # can be converted into ISO-8859-1 without errors. This happens
+        # to be the wrong encoding, but it is a consistent encoding, so the
+        # code we're testing here won't run.
+        #
+        # So we temporarily disable chardet if it's present.
         doc = b"""\357\273\277<?xml version="1.0" encoding="UTF-8"?>
 <html><b>\330\250\330\252\330\261</b>
 <i>\310\322\321\220\312\321\355\344</i></html>"""
-        dammit = UnicodeDammit(doc)
-        self.assertEqual(True, dammit.contains_replacement_characters)
-        self.assertTrue("\ufffd" in dammit.unicode_markup)
+        chardet = bs4.dammit.chardet
+        try:
+            bs4.dammit.chardet = None
+            with warnings.catch_warnings(record=True) as w:
+                dammit = UnicodeDammit(doc)
+                self.assertEqual(True, dammit.contains_replacement_characters)
+                self.assertTrue("\ufffd" in dammit.unicode_markup)
 
-        soup = BeautifulSoup(doc)
-        self.assertTrue(soup.contains_replacement_characters)
+                soup = BeautifulSoup(doc, "html.parser")
+                self.assertTrue(soup.contains_replacement_characters)
+
+                msg = w[0].message
+                self.assertTrue(isinstance(msg, UnicodeWarning))
+                self.assertTrue("Some characters could not be decoded" in str(msg))
+        finally:
+            bs4.dammit.chardet = chardet
+
+
+class TestNamedspacedAttribute(SoupTest):
+
+    def test_name_may_be_none(self):
+        a = NamespacedAttribute("xmlns", None)
+        self.assertEqual(a, "xmlns")
+
+    def test_attribute_is_equivalent_to_colon_separated_string(self):
+        a = NamespacedAttribute("a", "b")
+        self.assertEqual("a:b", a)
+
+    def test_attributes_are_equivalent_if_prefix_and_name_identical(self):
+        a = NamespacedAttribute("a", "b", "c")
+        b = NamespacedAttribute("a", "b", "c")
+        self.assertEqual(a, b)
+
+        # The actual namespace is not considered.
+        c = NamespacedAttribute("a", "b", None)
+        self.assertEqual(a, c)
+
+        # But name and prefix are important.
+        d = NamespacedAttribute("a", "z", "c")
+        self.assertNotEqual(a, d)
+
+        e = NamespacedAttribute("z", "b", "c")
+        self.assertNotEqual(a, e)

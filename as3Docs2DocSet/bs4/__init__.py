@@ -17,7 +17,7 @@ http://www.crummy.com/software/BeautifulSoup/bs4/doc/
 """
 
 __author__ = "Leonard Richardson (leonardr@segfault.org)"
-__version__ = "4.0.0b6"
+__version__ = "4.0.0b9"
 __copyright__ = "Copyright (c) 2004-2012 Leonard Richardson"
 __license__ = "MIT"
 
@@ -193,9 +193,9 @@ class BeautifulSoup(Tag):
         self.tagStack = []
         self.pushTag(self)
 
-    def new_tag(self, name, **attrs):
+    def new_tag(self, name, namespace=None, nsprefix=None, **attrs):
         """Create a new tag associated with this soup."""
-        return Tag(None, self.builder, name, attrs)
+        return Tag(None, self.builder, name, namespace, nsprefix, attrs)
 
     def new_string(self, s):
         """Create a new NavigableString associated with this soup."""
@@ -249,7 +249,7 @@ class BeautifulSoup(Tag):
         self.previous_element = o
         self.currentTag.contents.append(o)
 
-    def _popToTag(self, name, inclusivePop=True):
+    def _popToTag(self, name, nsprefix=None, inclusivePop=True):
         """Pops the tag stack up to and including the most recent
         instance of the given tag. If inclusivePop is false, pops the tag
         stack up to but *not* including the most recent instqance of
@@ -262,7 +262,8 @@ class BeautifulSoup(Tag):
         mostRecentTag = None
 
         for i in range(len(self.tagStack) - 1, 0, -1):
-            if name == self.tagStack[i].name:
+            if (name == self.tagStack[i].name
+                and nsprefix == self.tagStack[i].nsprefix == nsprefix):
                 numPops = len(self.tagStack) - i
                 break
         if not inclusivePop:
@@ -272,7 +273,7 @@ class BeautifulSoup(Tag):
             mostRecentTag = self.popTag()
         return mostRecentTag
 
-    def handle_starttag(self, name, attrs):
+    def handle_starttag(self, name, namespace, nsprefix, attrs):
         """Push a start tag on to the stack.
 
         If this method returns None, the tag was rejected by the
@@ -281,7 +282,7 @@ class BeautifulSoup(Tag):
         don't call handle_endtag.
         """
 
-        #print "Start tag %s: %s" % (name, attrs)
+        # print "Start tag %s: %s" % (name, attrs)
         self.endData()
 
         if (self.parse_only and len(self.tagStack) <= 1
@@ -289,8 +290,8 @@ class BeautifulSoup(Tag):
                  or not self.parse_only.search_tag(name, attrs))):
             return None
 
-        tag = Tag(self, self.builder, name, attrs, self.currentTag,
-                  self.previous_element)
+        tag = Tag(self, self.builder, name, namespace, nsprefix, attrs,
+                  self.currentTag, self.previous_element)
         if tag is None:
             return tag
         if self.previous_element:
@@ -299,10 +300,10 @@ class BeautifulSoup(Tag):
         self.pushTag(tag)
         return tag
 
-    def handle_endtag(self, name):
+    def handle_endtag(self, name, nsprefix=None):
         #print "End tag: " + name
         self.endData()
-        self._popToTag(name)
+        self._popToTag(name, nsprefix)
 
     def handle_data(self, data):
         self.currentData.append(data)
@@ -318,7 +319,7 @@ class BeautifulSoup(Tag):
             encoding_part = ''
             if eventual_encoding != None:
                 encoding_part = ' encoding="%s"' % eventual_encoding
-            prefix = '<?xml version="1.0"%s>\n' % encoding_part
+            prefix = '<?xml version="1.0"%s?>\n' % encoding_part
         else:
             prefix = ''
         if not pretty_print:

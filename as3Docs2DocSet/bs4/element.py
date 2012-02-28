@@ -22,6 +22,19 @@ def _alias(attr):
     return alias
 
 
+class NamespacedAttribute(str):
+
+    def __new__(cls, prefix, name, namespace=None):
+        if name is None:
+            obj = str.__new__(cls, prefix)
+        else:
+            obj = str.__new__(cls, prefix + ":" + name)
+        obj.prefix = prefix
+        obj.name = name
+        obj.namespace = namespace
+        return obj
+
+
 class PageElement(object):
     """Contains the navigational information for some part of the page
     (either a tag or a piece of text)"""
@@ -494,21 +507,23 @@ class Doctype(NavigableString):
         value = name
         if pub_id is not None:
             value += ' PUBLIC "%s"' % pub_id
-        if system_id is not None:
+            if system_id is not None:
+                value += ' "%s"' % system_id
+        elif system_id is not None:
             value += ' SYSTEM "%s"' % system_id
 
         return Doctype(value)
 
     PREFIX = '<!DOCTYPE '
-    SUFFIX = '>'
+    SUFFIX = '>\n'
 
 
 class Tag(PageElement):
 
     """Represents a found HTML tag with its attributes and contents."""
 
-    def __init__(self, parser=None, builder=None, name=None, attrs=None,
-                 parent=None, previous=None):
+    def __init__(self, parser=None, builder=None, name=None, namespace=None,
+                 prefix=None, attrs=None, parent=None, previous=None):
         "Basic constructor."
 
         if parser is None:
@@ -520,6 +535,8 @@ class Tag(PageElement):
         if name is None:
             raise ValueError("No value provided for new tag's name.")
         self.name = name
+        self.namespace = namespace
+        self.prefix = prefix
         if attrs is None:
             attrs = {}
         else:
@@ -659,6 +676,9 @@ class Tag(PageElement):
     def has_attr(self, key):
         return key in self.attrs
 
+    def __hash__(self):
+        return str(self).__hash__()
+
     def __getitem__(self, key):
         """tag[key] returns the value of the 'key' attribute for the tag,
         and throws an exception if it's not there."""
@@ -745,9 +765,12 @@ class Tag(PageElement):
         __str__ = __repr__ = __unicode__
 
     def encode(self, encoding=DEFAULT_OUTPUT_ENCODING,
-               indent_level=None, formatter="minimal"):
-        return self.decode(indent_level, encoding,
-                           formatter).encode(encoding)
+               indent_level=None, formatter="minimal",
+               errors="xmlcharrefreplace"):
+        # Turn the data structure into Unicode, then encode the
+        # Unicode.
+        u = self.decode(indent_level, encoding, formatter)
+        return u.encode(encoding, errors)
 
     def decode(self, indent_level=None,
                eventual_encoding=DEFAULT_OUTPUT_ENCODING,
@@ -776,7 +799,7 @@ class Tag(PageElement):
                         and '%SOUP-ENCODING%' in val):
                         val = self.substitute_encoding(val, eventual_encoding)
 
-                    decoded = (key + '='
+                    decoded = (str(key) + '='
                                + EntitySubstitution.substitute_xml(val, True))
                 attrs.append(decoded)
         close = ''
@@ -785,6 +808,10 @@ class Tag(PageElement):
             close = '/'
         else:
             closeTag = '</%s>' % self.name
+
+        prefix = ''
+        if self.prefix:
+            prefix = self.prefix + ":"
 
         pretty_print = (indent_level is not None)
         if pretty_print:
@@ -806,7 +833,8 @@ class Tag(PageElement):
                 attribute_string = ' ' + ' '.join(attrs)
             if pretty_print:
                 s.append(space)
-            s.append('<%s%s%s>' % (self.name, attribute_string, close))
+            s.append('<%s%s%s%s>' % (
+                    prefix, self.name, attribute_string, close))
             if pretty_print:
                 s.append("\n")
             s.append(contents)
@@ -820,9 +848,11 @@ class Tag(PageElement):
             s = ''.join(s)
         return s
 
-    def prettify(self, encoding=DEFAULT_OUTPUT_ENCODING,
-                 formatter="minimal"):
-        return self.encode(encoding, True, formatter)
+    def prettify(self, encoding=None, formatter="minimal"):
+        if encoding is None:
+            return self.decode(True, formatter=formatter)
+        else:
+            return self.encode(encoding, True, formatter=formatter)
 
     def decode_contents(self, indent_level=None,
                        eventual_encoding=DEFAULT_OUTPUT_ENCODING,
@@ -983,7 +1013,7 @@ class SoupStrainer(object):
     searchTag = search_tag
 
     def search(self, markup):
-        #print 'looking for %s in %s' % (self, markup)
+        # print 'looking for %s in %s' % (self, markup)
         found = None
         # If given a list of items, scan it for a text element that
         # matches.
@@ -1009,7 +1039,7 @@ class SoupStrainer(object):
         return found
 
     def _matches(self, markup, match_against):
-        #print "Matching %s against %s" % (markup, match_against)
+        # print "Matching %s against %s" % (markup, match_against)
         result = False
 
         if isinstance(markup, list) or isinstance(markup, tuple):

@@ -14,9 +14,24 @@ import pickle
 import re
 import warnings
 from bs4 import BeautifulSoup
-from bs4.builder import builder_registry
-from bs4.element import CData, NavigableString, SoupStrainer, Tag
-from bs4.testing import SoupTest
+from bs4.builder import (
+    builder_registry,
+    HTMLParserTreeBuilder,
+)
+from bs4.element import (
+    CData,
+    Doctype,
+    NavigableString,
+    SoupStrainer,
+    Tag,
+)
+from bs4.testing import (
+    SoupTest,
+    skipIf,
+)
+
+XML_BUILDER_PRESENT = (builder_registry.lookup("xml") is not None)
+LXML_PRESENT = (builder_registry.lookup("lxml") is not None)
 
 class TreeTest(SoupTest):
 
@@ -54,7 +69,6 @@ class TestFind(TreeTest):
         soup = self.soup('<h1>Räksmörgås</h1>')
         self.assertEqual(soup.find(text='Räksmörgås'), 'Räksmörgås')
 
-
 class TestFindAll(TreeTest):
     """Basic tests of the find_all() method."""
 
@@ -84,6 +98,14 @@ class TestFindAll(TreeTest):
         # A limit of 0 means no limit.
         self.assertSelects(
             soup.find_all('a', limit=0), ["1", "2", "3", "4", "5"])
+
+class TestFindAllBasicNamespaces(TreeTest):
+
+    def test_find_by_namespaced_name(self):
+        soup = self.soup('<mathml:msqrt>4</mathml:msqrt><a svg:fill="red">')
+        self.assertEqual("4", soup.find("mathml:msqrt").string)
+        self.assertEqual("a", soup.find(attrs= { "svg:fill" : "red" }).name)
+
 
 class TestFindAllByName(TreeTest):
     """Test ways of finding tags by tag name."""
@@ -600,14 +622,15 @@ class TestTagCreation(SoupTest):
         self.assertEqual(None, new_tag.parent)
 
     def test_tag_inherits_self_closing_rules_from_builder(self):
-        xml_soup = BeautifulSoup("", "xml")
-        xml_br = xml_soup.new_tag("br")
-        xml_p = xml_soup.new_tag("p")
+        if XML_BUILDER_PRESENT:
+            xml_soup = BeautifulSoup("", "xml")
+            xml_br = xml_soup.new_tag("br")
+            xml_p = xml_soup.new_tag("p")
 
-        # Both the <br> and <p> tag are empty-element, just because
-        # they have no contents.
-        self.assertEqual(b"<br/>", xml_br.encode())
-        self.assertEqual(b"<p/>", xml_p.encode())
+            # Both the <br> and <p> tag are empty-element, just because
+            # they have no contents.
+            self.assertEqual(b"<br/>", xml_br.encode())
+            self.assertEqual(b"<p/>", xml_p.encode())
 
         html_soup = BeautifulSoup("", "html")
         html_br = html_soup.new_tag("br")
@@ -1000,10 +1023,6 @@ class TestElementObjects(SoupTest):
         markup = '<b a="1" z="5" m="3" f="2" y="4"></b>'
         self.assertSoupEquals(markup, '<b a="1" f="2" m="3" y="4" z="5"></b>')
 
-    def test_multiple_values_for_the_same_attribute_are_collapsed(self):
-        markup = '<b b="20" a="1" b="10" a="2" a="3" a="4"></b>'
-        self.assertSoupEquals(markup, '<b a="1" b="20"></b>')
-
     def test_string(self):
         # A tag that contains only a text node makes that node
         # available as .string.
@@ -1182,7 +1201,15 @@ class TestSubstitutions(SoupTest):
     def test_prettify_accepts_formatter(self):
         soup = BeautifulSoup("<html><body>foo</body></html>")
         pretty = soup.prettify(formatter = lambda x: x.upper())
-        self.assertTrue(b"FOO" in pretty)
+        self.assertTrue("FOO" in pretty)
+
+    def test_prettify_outputs_unicode_by_default(self):
+        soup = self.soup("<a></a>")
+        self.assertEqual(str, type(soup.prettify()))
+
+    def test_prettify_can_encode_data(self):
+        soup = self.soup("<a></a>")
+        self.assertEqual(bytes, type(soup.prettify("utf-8")))
 
     def test_html_entity_substitution_off_by_default(self):
         markup = "<b>Sacr\N{LATIN SMALL LETTER E WITH ACUTE} bleu!</b>"
@@ -1242,6 +1269,16 @@ class TestEncoding(SoupTest):
         self.assertEqual(
             soup.b.encode("utf-8"), html.encode("utf-8"))
 
+    def test_encoding_substitutes_unrecognized_characters_by_default(self):
+        html = "<b>\N{SNOWMAN}</b>"
+        soup = self.soup(html)
+        self.assertEqual(soup.b.encode("ascii"), b"<b>&#9731;</b>")
+
+    def test_encoding_can_be_made_strict(self):
+        html = "<b>\N{SNOWMAN}</b>"
+        soup = self.soup(html)
+        self.assertRaises(
+            UnicodeEncodeError, soup.encode, "ascii", errors="strict")
 
 class TestNavigableStringSubclasses(SoupTest):
 
@@ -1254,3 +1291,12 @@ class TestNavigableStringSubclasses(SoupTest):
         self.assertEqual(str(soup), "<![CDATA[foo]]>")
         self.assertEqual(soup.find(text="foo"), "foo")
         self.assertEqual(soup.contents[0], "foo")
+
+    def test_doctype_ends_in_newline(self):
+        # Unlike other NavigableString subclasses, a DOCTYPE always ends
+        # in a newline.
+        doctype = Doctype("foo")
+        soup = self.soup("")
+        soup.insert(1, doctype)
+        self.assertEqual(soup.encode(), b"<!DOCTYPE foo>\n")
+

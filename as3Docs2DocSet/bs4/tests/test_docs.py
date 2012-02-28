@@ -20,17 +20,17 @@ DOCTEST_FLAGS = (
     doctest.REPORT_NDIFF)
 
 
-def additional_tests():
-    "Run the doc tests (README.txt and docs/*, if any exist)"
-    doctest_files = [
-        os.path.abspath(resource_filename('beautifulsoup', 'README.txt'))]
-    if resource_exists('beautifulsoup', 'docs'):
-        for name in resource_listdir('beautifulsoup', 'docs'):
-            if name.endswith('.txt'):
-                doctest_files.append(
-                    os.path.abspath(
-                        resource_filename('beautifulsoup', 'docs/%s' % name)))
-    kwargs = dict(module_relative=False, optionflags=DOCTEST_FLAGS)
-    atexit.register(cleanup_resources)
-    return unittest.TestSuite((
-        doctest.DocFileSuite(*doctest_files, **kwargs)))
+# def additional_tests():
+#     "Run the doc tests (README.txt and docs/*, if any exist)"
+#     doctest_files = [
+#         os.path.abspath(resource_filename('bs4', 'README.txt'))]
+#     if resource_exists('bs4', 'docs'):
+#         for name in resource_listdir('bs4', 'docs'):
+#             if name.endswith('.txt'):
+#                 doctest_files.append(
+#                     os.path.abspath(
+#                         resource_filename('bs4', 'docs/%s' % name)))
+#     kwargs = dict(module_relative=False, optionflags=DOCTEST_FLAGS)
+#     atexit.register(cleanup_resources)
+#     return unittest.TestSuite((
+#         doctest.DocFileSuite(*doctest_files, **kwargs)))

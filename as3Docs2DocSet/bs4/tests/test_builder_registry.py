@@ -6,8 +6,6 @@ from bs4 import BeautifulSoup
 from bs4.builder import (
     builder_registry as registry,
     HTMLParserTreeBuilder,
-    LXMLTreeBuilderForXML,
-    LXMLTreeBuilder,
     TreeBuilderRegistry,
 )
 
@@ -18,7 +16,10 @@ except ImportError:
     HTML5LIB_PRESENT = False
 
 try:
-    from bs4.builder import LXMLTreeBuilder
+    from bs4.builder import (
+        LXMLTreeBuilderForXML,
+        LXMLTreeBuilder,
+        )
     LXML_PRESENT = True
 except ImportError:
     LXML_PRESENT = False
@@ -28,10 +29,13 @@ class BuiltInRegistryTest(unittest.TestCase):
     """Test the built-in registry with the default builders registered."""
 
     def test_combination(self):
-        self.assertEqual(registry.lookup('fast', 'html'),
-                          LXMLTreeBuilder)
-        self.assertEqual(registry.lookup('permissive', 'xml'),
-                          LXMLTreeBuilderForXML)
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('fast', 'html'),
+                             LXMLTreeBuilder)
+
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('permissive', 'xml'),
+                             LXMLTreeBuilderForXML)
         self.assertEqual(registry.lookup('strict', 'html'),
                           HTMLParserTreeBuilder)
         if HTML5LIB_PRESENT:
@@ -41,15 +45,20 @@ class BuiltInRegistryTest(unittest.TestCase):
     def test_lookup_by_markup_type(self):
         if LXML_PRESENT:
             self.assertEqual(registry.lookup('html'), LXMLTreeBuilder)
+            self.assertEqual(registry.lookup('xml'), LXMLTreeBuilderForXML)
         else:
-            self.assertEqual(registry.lookup('html'), HTML5TreeBuilder)
-        self.assertEqual(registry.lookup('xml'), LXMLTreeBuilderForXML)
+            self.assertEqual(registry.lookup('xml'), None)
+            if HTML5LIB_PRESENT:
+                self.assertEqual(registry.lookup('html'), HTML5TreeBuilder)
+            else:
+                self.assertEqual(registry.lookup('html'), HTMLParserTreeBuilder)
 
     def test_named_library(self):
-        self.assertEqual(registry.lookup('lxml', 'xml'),
-                          LXMLTreeBuilderForXML)
-        self.assertEqual(registry.lookup('lxml', 'html'),
-                          LXMLTreeBuilder)
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('lxml', 'xml'),
+                             LXMLTreeBuilderForXML)
+            self.assertEqual(registry.lookup('lxml', 'html'),
+                             LXMLTreeBuilder)
         if HTML5LIB_PRESENT:
             self.assertEqual(registry.lookup('html5lib'),
                               HTML5TreeBuilder)

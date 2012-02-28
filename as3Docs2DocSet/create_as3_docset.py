@@ -669,9 +669,8 @@ def makeDocset(args):
     #   ... more <File> tags
 
     # bs4 object that will represent the xml file we are creating. 
-    #tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?> # removing this line for now since bs4 is bugged
-    tokenSoup = BeautifulSoup('''
-    <Tokens version="1.0"></Tokens>''', "xml")
+    tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?> 
+    <Tokens version="1.0"></Tokens>''', "xml") # this requires bs4 beta 9 at least or else the xml declaration is bugged.
 
     # the tag that are adding <File> tags too
     soupTokensTag = tokenSoup.find("Tokens")

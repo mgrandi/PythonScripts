@@ -38,37 +38,10 @@ from bs4.builder import (
 
 HTMLPARSER = 'html.parser'
 
-class HTMLParserTreeBuilder(HTMLParser, HTMLTreeBuilder):
-
-    is_xml = False
-    features = [HTML, STRICT, HTMLPARSER]
-
-    def __init__(self, *args, **kwargs):
-        if CONSTRUCTOR_TAKES_STRICT:
-            kwargs['strict'] = False
-        return super(HTMLParserTreeBuilder, self).__init__(*args, **kwargs)
-
-    def prepare_markup(self, markup, user_specified_encoding=None,
-                       document_declared_encoding=None):
-        """
-        :return: A 4-tuple (markup, original encoding, encoding
-        declared within markup, whether any characters had to be
-        replaced with REPLACEMENT CHARACTER).
-        """
-        if isinstance(markup, str):
-            return markup, None, None, False
-
-        try_encodings = [user_specified_encoding, document_declared_encoding]
-        dammit = UnicodeDammit(markup, try_encodings, is_html=True)
-        return (dammit.markup, dammit.original_encoding,
-                dammit.declared_html_encoding,
-                dammit.contains_replacement_characters)
-
-    def feed(self, markup):
-        super(HTMLParserTreeBuilder, self).feed(markup)
-
+class BeautifulSoupHTMLParser(HTMLParser):
     def handle_starttag(self, name, attrs):
-        self.soup.handle_starttag(name, dict(attrs))
+        # XXX namespace
+        self.soup.handle_starttag(name, None, None, dict(attrs))
 
     def handle_endtag(self, name):
         self.soup.handle_endtag(name)
@@ -80,9 +53,15 @@ class HTMLParserTreeBuilder(HTMLParser, HTMLTreeBuilder):
         # XXX workaround for a bug in HTMLParser. Remove this once
         # it's fixed.
         if name.startswith('x'):
-            data = chr(int(name.lstrip('x'), 16))
+            real_name = int(name.lstrip('x'), 16)
         else:
-            data = chr(int(name))
+            real_name = int(name)
+
+        try:
+            data = chr(real_name)
+        except (ValueError, OverflowError) as e:
+            data = "\N{REPLACEMENT CHARACTER}"
+
         self.handle_data(data)
 
     def handle_entityref(self, name):
@@ -120,6 +99,40 @@ class HTMLParserTreeBuilder(HTMLParser, HTMLTreeBuilder):
         self.soup.handle_data(data)
         self.soup.endData(ProcessingInstruction)
 
+
+class HTMLParserTreeBuilder(HTMLTreeBuilder):
+
+    is_xml = False
+    features = [HTML, STRICT, HTMLPARSER]
+
+    def __init__(self, *args, **kwargs):
+        if CONSTRUCTOR_TAKES_STRICT:
+            kwargs['strict'] = False
+        self.parser_args = (args, kwargs)
+
+    def prepare_markup(self, markup, user_specified_encoding=None,
+                       document_declared_encoding=None):
+        """
+        :return: A 4-tuple (markup, original encoding, encoding
+        declared within markup, whether any characters had to be
+        replaced with REPLACEMENT CHARACTER).
+        """
+        if isinstance(markup, str):
+            return markup, None, None, False
+
+        try_encodings = [user_specified_encoding, document_declared_encoding]
+        dammit = UnicodeDammit(markup, try_encodings, is_html=True)
+        return (dammit.markup, dammit.original_encoding,
+                dammit.declared_html_encoding,
+                dammit.contains_replacement_characters)
+
+    def feed(self, markup):
+        args, kwargs = self.parser_args
+        parser = BeautifulSoupHTMLParser(*args, **kwargs)
+        parser.soup = self.soup
+        parser.feed(markup)
+
+
 # Patch 3.2 versions of HTMLParser earlier than 3.2.3 to use some
 # 3.2.3 code. This ensures they don't treat markup like <p></p> as a
 # string.
@@ -146,7 +159,7 @@ if major == 3 and minor == 2 and not CONSTRUCTOR_TAKES_STRICT:
    )*
   \s*                                # trailing whitespace
 """, re.VERBOSE)
-    HTMLParserTreeBuilder.locatestarttagend = locatestarttagend
+    BeautifulSoupHTMLParser.locatestarttagend = locatestarttagend
 
     from html.parser import tagfind, attrfind
 
@@ -209,7 +222,7 @@ if major == 3 and minor == 2 and not CONSTRUCTOR_TAKES_STRICT:
         self.cdata_elem = elem.lower()
         self.interesting = re.compile(r'</\s*%s\s*>' % self.cdata_elem, re.I)
 
-    HTMLParserTreeBuilder.parse_starttag = parse_starttag
-    HTMLParserTreeBuilder.set_cdata_mode = set_cdata_mode
+    BeautifulSoupHTMLParser.parse_starttag = parse_starttag
+    BeautifulSoupHTMLParser.set_cdata_mode = set_cdata_mode
 
     CONSTRUCTOR_TAKES_STRICT = True
