@@ -286,6 +286,67 @@ def addSpanTagsToTokenList(tagList, refType, pageName, anchorPrefix, tokenList):
             raise ValueError("addSpanTagsToTokenList(): one of the entries in the list was not a tag obj or not a <span> tag! it was: {}".format(tag))
 
 
+def modifyAndSaveHtml(sourceFile, destinationFile):
+    '''takes a html file from the documentation, and we remove certain elements 
+    and modify some attributes to make it so it actually views properly in the 
+    dash viewer
+
+    @param sourceFile - the original html file we are modifying
+    @param destinationFile - where we are saving the modified html'''
+
+    pageSoup = None
+    
+    with open(sourceFile, "r", encoding="utf-8") as f:
+
+            pageSoup = BeautifulSoup(f)
+
+    # find the following things and remove them:
+    # 1 - div id "filter_panel_float" , the thing that is above the page title (has package/clas filters)
+    # 2 - div id splitter # stuff on the left we dont want
+    # 3 - div id mainleft # stuff on the left we dont want
+
+    # 1
+    filterTag = pageSoup.find(lambda tag: tag.name == "div" 
+        and tag.has_attr("id")
+        and tag["id"] ==  "filter_panel_float")
+
+    if filterTag:
+        filterTag.decompose() # deletes the tag
+
+    # 2
+    splitTag = pageSoup.find(lambda tag: tag.name == "div"
+        and tag.has_attr("id")
+        and tag["id"] == "splitter")
+
+    if splitTag:
+        splitTag.decompose() # deletes the tag
+
+    # 3
+    leftTag = pageSoup.find(lambda tag: tag.name == "div"
+        and tag.has_attr("id")
+        and tag["id"] == "mainleft")
+
+    if leftTag:
+        leftTag.decompose()
+
+    # now find the  maincontainer div and delete the style attribute
+    mainTag = pageSoup.find(lambda tag: tag.name == "div"
+        and tag.has_attr("id")
+        and tag["id"] == "maincontainer"
+        and tag.has_attr("style"))
+
+    if mainTag:
+        del mainTag["style"]
+
+    # make sure we have folder heirarchy or else we get no such file/directory
+    os.makedirs(os.path.split(destinationFile)[0], exist_ok=True) # creates up to leaf directory, aka the html file
+
+    # now write the modified soup to the destination dir
+    with open(destinationFile, "w", encoding="utf-8") as f:
+
+        f.write(str(pageSoup))
+
+
 def trouble(message):
     ''' prints an error message and exits with status 1
     @param message - the error message'''
@@ -323,9 +384,8 @@ def makeDocset(args):
 
     print("Docset being saved to: {}".format(docsetFolder))
 
-    ## Create all the necessary folder hierarchy. Don't create "documents" because the copytree will create that 
-    # when we copy the as3 docs over to the "documents" foler. 
-    os.makedirs(os.path.join(docsetFolder,"Contents", "Resources"))
+    ## Create all the necessary folder hierarchy. 
+    os.makedirs(os.path.join(docsetFolder,"Contents", "Resources", "Documents"))
     contentsFolder = os.path.join(docsetFolder, "Contents")
 
     ## Create Info.plist
@@ -374,10 +434,8 @@ def makeDocset(args):
         </DocSetNodes>
         """.format(modindexPath))
 
-    # copy the langref folder over to the Documents folder inside the .docset file
+    # var to the  Documents folder inside the .docset file
     documentsFolder = os.path.join(resourcesFolder ,"Documents")
-    print("Copying {} to {}".format(sourceFolder, documentsFolder))
-    shutil.copytree(sourceFolder, documentsFolder)
 
 
     ## I'll hide the header because it makes no sense in a docset
@@ -423,7 +481,7 @@ def makeDocset(args):
     for htmlFile in htmlPagesToParse:
 
         # the html files are inside the Documents folder. 
-        with open(os.path.join(documentsFolder, htmlFile), "r", encoding="utf-8") as f:
+        with open(os.path.join(sourceFolder, htmlFile), "r", encoding="utf-8") as f:
 
             # create the soup
             soup = BeautifulSoup(f)
@@ -460,7 +518,11 @@ def makeDocset(args):
 
         soup = None
 
-        with open(os.path.join(sourceFolder, pageLink), "r", encoding="utf-8") as f:
+        # first we need modify the page for viewing with dash and save it to the documents folder
+        modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
+
+        # then we open it and search through it.
+        with open(os.path.join(documentsFolder, pageLink), "r", encoding="utf-8") as f:
 
             print("Parsing file {}/{}: {}".format(counter, total, pageLink))
             counter += 1
