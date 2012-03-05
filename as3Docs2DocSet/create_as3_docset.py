@@ -434,7 +434,7 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
     # make it so all 'inherited' properties/methods are shown by default since we are not going to be able to use JS. 
     # delete this if you want to use js and have the normal arrow showing hide/show inherited stuff
     inheritedTags = pageSoup.find_all(lambda tag: (tag.name == "tr"
-        or tag.name == "table")
+        or tag.name == "table") # tables can have this too
         and tag.has_attr("class")
         and [not x.startswith("hide") for x in tag["class"]])
 
@@ -452,6 +452,19 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
 
             tag["class"] = resultList
 
+    # get rid of the "show / hide inherited properties" or whatever links.
+    # note that there are 'two' tags with the class "showHideLinks", the one with
+    # div tags as children is the one we want. (the other one, with <a> tags, is a link that usually says
+    # "click for more information on <something>")
+    showHideTags = pageSoup.find_all(lambda tag: tag.name == "div"
+        and tag.has_attr("class")
+        and "showHideLinks" in tag["class"]
+        and delShowHideTagsHelper(tag)) # use helper method
+
+    if showHideTags:
+        for iterTag in showHideTags:
+            iterTag.decompose() # delete each of the tags that match this.
+
 
 
     # make sure we have folder heirarchy or else we get no such file/directory
@@ -463,6 +476,18 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
 
         f.write(str(pageSoup))
 
+
+def delShowHideTagsHelper(tag):
+    ''' helper method to help us determine if a <div> tag is the correct tag to delete
+    when we are getting rid of the "show/hide inherited whatever" tags.
+
+    @param tag - the tag that BS4 gives us when filtering
+    @return boolean, whether we want to delete this tag or not.
+    '''
+    for tag in tag.contents:            
+        if tag.name == "a":
+            return False
+    return True
 
 def trouble(message):
     ''' prints an error message and exits with status 1
