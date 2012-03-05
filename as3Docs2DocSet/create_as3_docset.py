@@ -25,6 +25,86 @@ import sys
 import urllib.parse
 
 
+# misc variables
+htmlPagesToParse = ["all-index-A.html",
+                    "all-index-B.html",
+                    "all-index-C.html",
+                    "all-index-D.html",
+                    "all-index-E.html",
+                    "all-index-F.html",
+                    "all-index-G.html",
+                    "all-index-H.html",
+                    "all-index-I.html",
+                    "all-index-J.html",
+                    "all-index-K.html",
+                    "all-index-L.html",
+                    "all-index-M.html",
+                    "all-index-N.html",
+                    "all-index-O.html",
+                    "all-index-P.html",
+                    "all-index-Q.html",
+                    "all-index-R.html",
+                    "all-index-S.html",
+                    "all-index-T.html",
+                    "all-index-U.html",
+                    "all-index-V.html",
+                    "all-index-W.html",
+                    "all-index-X.html",
+                    "all-index-Y.html",
+                    "all-index-Z.html",
+                    "all-index-Symbols.html"]
+
+
+staticFiles = ["ajax-loader.gif",
+    "asfilter.css",
+    "chcsearch.css",
+    "chcsearchlight.css",
+    "content-fonts.css",
+    "content-hyperlinks.css",
+    "content-ie6.css",
+    "content.css",
+    "favicon.ico",
+    "filter-style.css",
+    "filters-values.xml",
+    "filters.xml",
+    "helpmap.txt",
+    "helpmapBaseUrl.txt",
+    "ion-style.css",
+    "ion.css",
+    "jslr-style.css",
+    "localeSpecific.css",
+    "logoION.jpg",
+    "override.css",
+    "popup.css",
+    "print.css",
+    "readme.txt",
+    "searchbutton.png",
+    "standalone-style.css",
+    "style.css",
+    "suggestionFile.xml",
+    "titleTableTopION.jpg",
+    "tree.css",
+    "appendixes.html",
+    "index.html",
+    "class-summary.html",
+    "package-summary.html",
+    "package-list.html",
+    "charset-codes.html",
+    "compilerErrors.html",
+    "compilerWarnings.html",
+    "conventions.html",
+    "deprecated.html",
+    "index-list.html",
+    "motionXSD.html",
+    "mxml-tag-detail.html",
+    "mxml-tags.html",
+    "runtimeErrors.html",
+    "specialTypes.html",
+    "TimedTextTags.html"]
+
+staticFolders = ["images"]
+
+
 def printTraceback():
     '''prints the traceback'''
 
@@ -316,30 +396,45 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
     # 2
     splitTag = pageSoup.find(lambda tag: tag.name == "div"
         and tag.has_attr("id")
-        and tag["id"] == "splitter")
+        and tag["id"] == "splitter"
+        and tag.has_attr("class")
+        and tag["class"] == "splitter")
 
     if splitTag:
         splitTag.decompose() # deletes the tag
 
     # 3
     leftTag = pageSoup.find(lambda tag: tag.name == "div"
+        and tag.has_attr("class")
+        and tag["class"] == "mainleft"
         and tag.has_attr("id")
-        and tag["id"] == "mainleft")
+        and tag["id"] == "toc") # if javascript is on, then it just brings back this element, wtf?
 
     if leftTag:
-        leftTag.decompose()
+        leftTag.decompose() # delete tag
 
-    # now find the  maincontainer div and delete the style attribute
+    # now find the  maincontainer div and delete the style attribute cause its set to none by default
     mainTag = pageSoup.find(lambda tag: tag.name == "div"
         and tag.has_attr("id")
         and tag["id"] == "maincontainer"
         and tag.has_attr("style"))
 
     if mainTag:
-        del mainTag["style"]
+        del mainTag["style"] # delete style attribute
+
+    # get rid of the search bar in the top right
+    searchTag = pageSoup.find(lambda tag: tag.name == "form"
+        and tag.has_attr("class")
+        and "searchFormION" in tag["class"]) # i have to say "in" because class is a multi valued attribute
+
+    if searchTag:
+        searchTag.decompose() # delete tag
+
+
 
     # make sure we have folder heirarchy or else we get no such file/directory
-    os.makedirs(os.path.split(destinationFile)[0], exist_ok=True) # creates up to leaf directory, aka the html file
+    if not os.path.exists(os.path.split(destinationFile)[0]):
+        os.makedirs(os.path.split(destinationFile)[0]) # creates up to leaf directory, aka the html file
 
     # now write the modified soup to the destination dir
     with open(destinationFile, "w", encoding="utf-8") as f:
@@ -354,6 +449,31 @@ def trouble(message):
     print(message + "\n")
     printTraceback()
     sys.exit(1)
+
+
+def copyStaticFilesToDocs(srcFolder, destFolder):
+    ''' copies static files to the Documents folder, that don't get
+    copied automatically during our script run. Css files, html files,etc
+    @param srcFolder - folder that we are copying stuff from
+    @param destFolder - the folder we are copying stuff too'''
+
+    # copy all of the index files from our htmlPagesToParse list at the top 
+    # of the script
+    for entry in htmlPagesToParse:
+
+        shutil.copy2(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
+
+
+    # copy the static to the documents directory
+    for entry in staticFiles:
+
+        shutil.copy2(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
+
+    # copy static folders
+    for entry in staticFolders:
+
+        shutil.copytree(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
+
 
 def makeDocset(args):
     ''' does the work to make the docset
@@ -437,38 +557,8 @@ def makeDocset(args):
     # var to the  Documents folder inside the .docset file
     documentsFolder = os.path.join(resourcesFolder ,"Documents")
 
-
-    ## I'll hide the header because it makes no sense in a docset
-    ## and messes up Dash
-    ## TODO make edits to the css file! not these though, these are for the python docs
-
-    htmlPagesToParse = ["all-index-A.html",
-                        "all-index-B.html",
-                        "all-index-C.html",
-                        "all-index-D.html",
-                        "all-index-E.html",
-                        "all-index-F.html",
-                        "all-index-G.html",
-                        "all-index-H.html",
-                        "all-index-I.html",
-                        "all-index-J.html",
-                        "all-index-K.html",
-                        "all-index-L.html",
-                        "all-index-M.html",
-                        "all-index-N.html",
-                        "all-index-O.html",
-                        "all-index-P.html",
-                        "all-index-Q.html",
-                        "all-index-R.html",
-                        "all-index-S.html",
-                        "all-index-T.html",
-                        "all-index-U.html",
-                        "all-index-V.html",
-                        "all-index-W.html",
-                        "all-index-X.html",
-                        "all-index-Y.html",
-                        "all-index-Z.html",
-                        "all-index-Symbols.html"]
+    # copy over static files, images, scripts, pages that don't get transferred automatically
+    copyStaticFilesToDocs(sourceFolder, documentsFolder)
 
     # dictionary that will hold the pages
     # key is the html files path, and value is a list of 
@@ -477,7 +567,7 @@ def makeDocset(args):
     pages = {}
 
     print("Figuring out what files we need to parse")
-    # get all the pages that we need to parse
+    # get all the pages that we need to parse. uses the htmlPagesToParse list defined at the top
     for htmlFile in htmlPagesToParse:
 
         # the html files are inside the Documents folder. 
@@ -519,10 +609,14 @@ def makeDocset(args):
         soup = None
 
         # first we need modify the page for viewing with dash and save it to the documents folder
-        modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
+        #modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
+        modifyAndSaveHtml(os.path.join(sourceFolder, "spark/components/Button.html"), os.path.join(documentsFolder, "spark/components/Button.html"))
+
 
         # then we open it and search through it.
-        with open(os.path.join(documentsFolder, pageLink), "r", encoding="utf-8") as f:
+        #with open(os.path.join(documentsFolder, pageLink), "r", encoding="utf-8") as f:
+        with open(os.path.join(documentsFolder, "spark/components/Button.html"), "r", encoding="utf-8") as f:
+
 
             print("Parsing file {}/{}: {}".format(counter, total, pageLink))
             counter += 1
@@ -719,7 +813,7 @@ def makeDocset(args):
         # **************************
 
         # these seem to be retrieved by the "method" thing. I think we are done....
-
+        break
 
     # now create the soup object that will be written to Tokens.xml
     # the format of this file is
