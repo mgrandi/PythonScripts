@@ -431,6 +431,28 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
         searchTag.decompose() # delete tag
 
 
+    # make it so all 'inherited' properties/methods are shown by default since we are not going to be able to use JS. 
+    # delete this if you want to use js and have the normal arrow showing hide/show inherited stuff
+    inheritedTags = pageSoup.find_all(lambda tag: (tag.name == "tr"
+        or tag.name == "table")
+        and tag.has_attr("class")
+        and [not x.startswith("hide") for x in tag["class"]])
+
+    if inheritedTags:
+        for tag in inheritedTags:
+            classNameList = tag["class"]
+            resultList = []
+
+            # here, since class is a multi valued attribute, we can't just delete the entire "class"
+            # attribute, we have to remove the one that starts with "hide", but leaves the rest alone.
+            for className in classNameList:
+
+                if not className.startswith("hide"):
+                    resultList.append(className)
+
+            tag["class"] = resultList
+
+
 
     # make sure we have folder heirarchy or else we get no such file/directory
     if not os.path.exists(os.path.split(destinationFile)[0]):
