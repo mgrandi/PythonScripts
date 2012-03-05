@@ -451,9 +451,11 @@ def trouble(message):
     sys.exit(1)
 
 
-def copyStaticFilesToDocs(srcFolder, destFolder):
+def copyAndModifyStaticFilesToDocs(srcFolder, destFolder):
     ''' copies static files to the Documents folder, that don't get
-    copied automatically during our script run. Css files, html files,etc
+    copied automatically during our script run. Css files, html files,etc.
+    For a few CSS files that we need to modify, we modify them here.
+
     @param srcFolder - folder that we are copying stuff from
     @param destFolder - the folder we are copying stuff too'''
 
@@ -467,7 +469,24 @@ def copyStaticFilesToDocs(srcFolder, destFolder):
     # copy the static to the documents directory
     for entry in staticFiles:
 
-        shutil.copy2(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
+        # have special cases 
+        if entry == "filter-style.css":
+
+            # here we change the css top property to be smaller so we dont have a big gap at the top
+            tmpCss = None
+            with open(os.path.join(srcFolder, entry), "r", encoding="utf-8") as f:
+                tmpCss = f.read()
+
+            # change the top property
+            tmpCss = re.sub("top:.*?;", "top:113px", tmpCss) # if the pattern isnt found, string is returned unchanged
+
+            # write modified file to dest directory
+            with open(os.path.join(destFolder, entry), "w", encoding="utf-8") as f:
+                f.write(tmpCss)
+
+        else:
+            # normal file, just copy it to dest directory
+            shutil.copy2(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
 
     # copy static folders
     for entry in staticFolders:
@@ -558,7 +577,8 @@ def makeDocset(args):
     documentsFolder = os.path.join(resourcesFolder ,"Documents")
 
     # copy over static files, images, scripts, pages that don't get transferred automatically
-    copyStaticFilesToDocs(sourceFolder, documentsFolder)
+    # and modify them if necessary
+    copyAndModifyStaticFilesToDocs(sourceFolder, documentsFolder)
 
     # dictionary that will hold the pages
     # key is the html files path, and value is a list of 
