@@ -303,7 +303,7 @@ def getTagListFormatTwo(tableTag, tagToSearchFor, hiddenId):
 
         raise ValueError("getTagListFormatTwo() the tableTag param was not a <table> tag! it was: {}".format(tableTag))
 
-def addATagsToTokenList(tagList, refType, pageName, tokenList):
+def getTokenAnchorTupleListFromATags(tagList, refType, pageName):
     '''this method adds <a> tags to the list of tuples that we are going to 
     serialize into the tokens.xml file. Here, the a tags are like:
 
@@ -314,10 +314,10 @@ def addATagsToTokenList(tagList, refType, pageName, tokenList):
     @param tagList - a list of the html tags that we are getting info out of and adding to the tokenList
     @param refType - the reftype for this tag for entry into tokens.xml, see http://kapeli.com/docsets/
     @param pageName - name of the page we are on 
-    @param tokenList - the list of tuples that we are adding the entry to. the tuple is of the format
-        (refString, anchor)
+    @return the tuple that we created, of the format (refString, anchor)
     '''
 
+    tokenList = []
     for tag in tagList:
 
         if tag.name =="a" and isinstance(tag, bs4.element.Tag):
@@ -331,8 +331,9 @@ def addATagsToTokenList(tagList, refType, pageName, tokenList):
 
             raise ValueError("addATagsToTokenList(): one of the entries in the list was not a tag obj or not a <a> tag! it was: {}".format(tag))
 
+    return tokenList
 
-def addSpanTagsToTokenList(tagList, refType, pageName, anchorPrefix, tokenList):
+def getTokenAnchorTupleListFromSpanTags(tagList, refType, pageName, anchorPrefix):
     ''' this method adds <span> tags to the list of tuples that we are going to
     serialize into the tokens.xml file. Here, the tags look like:
 
@@ -343,15 +344,15 @@ def addSpanTagsToTokenList(tagList, refType, pageName, anchorPrefix, tokenList):
     as they are just <some prefix>:<tag name>, so we just pass in the prefix and we can
     generate the name easily.
 
-    @param tag - a list of the html tags that we are getting info out of and adding to the tokenList
+    @param tagList - a list of the html tags that we are getting info out of and adding to the tokenList
     @param refType - the reftype for this tag for entry into tokens.xml, see http://kapeli.com/docsets/
     @param anchorPrefix - since span tags don't have the anchor inside them, this is the prefix that we 
         add to the tag's string to make the anchor
     @param pageName - name of the page we are on
-    @param tokenList - the list of tuples that we are adding the entry to. the tuple is of the format
-        (refString, anchor)
+    @return the tuple that we created, of the format (refString, anchor)
     '''
 
+    tokenList = []
     for tag in tagList:
 
         if tag.name =="span" and isinstance(tag, bs4.element.Tag):
@@ -365,6 +366,7 @@ def addSpanTagsToTokenList(tagList, refType, pageName, anchorPrefix, tokenList):
 
             raise ValueError("addSpanTagsToTokenList(): one of the entries in the list was not a tag obj or not a <span> tag! it was: {}".format(tag))
 
+    return tokenList
 
 def modifyAndSaveHtml(sourceFile, destinationFile):
     '''takes a html file from the documentation, and we remove certain elements 
@@ -711,7 +713,7 @@ def makeDocset(args):
             propList = getTagListFormatOne(propertyTableTag, "a", "hideInheritedProperty")
 
             # add it to tokenlist
-            addATagsToTokenList(propList, "instp", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(propList, "instp", pageName))
         
         # **************************
         # protected properties
@@ -728,7 +730,7 @@ def makeDocset(args):
             protPropList = getTagListFormatOne(protPropertyTableTag, "a", "hideInheritedProtectedProperty")
 
             # add to token list
-            addATagsToTokenList(protPropList, "instp", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(protPropList, "instp", pageName))
 
 
         # **************************
@@ -745,7 +747,7 @@ def makeDocset(args):
             methodList = getTagListFormatTwo(methodTableTag, "a", "hideInheritedMethod")
 
             # add to token list
-            addATagsToTokenList(methodList, "clm", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(methodList, "clm", pageName))
             
 
         # **************************
@@ -762,7 +764,7 @@ def makeDocset(args):
             protMethodList = getTagListFormatTwo(protMethodTableTag, "a", "hideInheritedProtectedMethod")
 
             # add to token list
-            addATagsToTokenList(protMethodList, "clm", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(protMethodList, "clm", pageName))
 
 
         # **************************
@@ -779,7 +781,7 @@ def makeDocset(args):
             eventList = getTagListFormatTwo(eventTableTag, "a", "hideInheritedEvent")
 
             # add to token list
-            addATagsToTokenList(eventList, "binding", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(eventList, "binding", pageName))
 
 
         # **************************
@@ -799,7 +801,7 @@ def makeDocset(args):
 
             # add to token list. note these are span tags so we need a diff method
             # anchors are in style of "style:SomethingHere"
-            addSpanTagsToTokenList(styleTwoList, "instp", pageName, "style", tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromSpanTags(styleTwoList, "instp", pageName, "style"))
 
         # **************************
         # skin parts
@@ -818,7 +820,7 @@ def makeDocset(args):
 
             # add to list
             # anchor is in style of "SkinPart:SomethingHere"
-            addSpanTagsToTokenList(skinPartList, "instp", pageName, "SkinPart", tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinPartList, "instp", pageName, "SkinPart"))
 
         # **************************
         # skin states
@@ -837,7 +839,7 @@ def makeDocset(args):
 
             # add to list
             # anchors are of the format "SkinState:SomethingHere"
-            addSpanTagsToTokenList(skinStateList, "instp", pageName, "SkinState", tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinStateList, "instp", pageName, "SkinState"))
 
 
         # **************************
@@ -857,7 +859,7 @@ def makeDocset(args):
 
             # add to list
             # anchors are of the format "effect:SomethingHere"
-            addSpanTagsToTokenList(effectList, "instp", pageName, "effect", tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromSpanTags(effectList, "instp", pageName, "effect"))
 
         # **************************
         # constants
@@ -873,7 +875,7 @@ def makeDocset(args):
             constList = getTagListFormatOne(constTableTag, "a", "hideInheritedConstant")
 
             # add to list
-            addATagsToTokenList(constList, "clconst", pageName, tokenList)
+            tokenList.extend(getTokenAnchorTupleListFromATags(constList, "clconst", pageName))
 
         # **************************
         # package functions
