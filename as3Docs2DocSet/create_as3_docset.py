@@ -368,13 +368,16 @@ def getTokenAnchorTupleListFromSpanTags(tagList, refType, pageName, anchorPrefix
 
     return tokenList
 
-def modifyAndSaveHtml(sourceFile, destinationFile):
+def modifyAndSaveHtml(sourceFile, destinationFile, tokenList):
     '''takes a html file from the documentation, and we remove certain elements 
     and modify some attributes to make it so it actually views properly in the 
-    dash viewer
+    dash viewer. This method also inserts the appleref anchor links so dash can 
+    use them for the Table of Contents feature.
 
     @param sourceFile - the original html file we are modifying
-    @param destinationFile - where we are saving the modified html'''
+    @param destinationFile - where we are saving the modified html
+    @param tokenList - the list of tuples, of the form (appleRef, anchor) for the current page
+        so that we can add appleref anchor links on the webpage.'''
 
     pageSoup = None
     
@@ -468,6 +471,22 @@ def modifyAndSaveHtml(sourceFile, destinationFile):
             iterTag.decompose() # delete each of the tags that match this.
 
 
+    # now we iterate through the tokenList, and add appleref anchor links right after the anchor links that 
+    # the page already has for all the methods/properties/styles/etc, for dash's table of contents feature
+    for iterTuple in tokenList:
+
+        appleRef = iterTuple[0]
+        anchorLink = iterTuple[1]
+
+        # find the anchor link in the webpage
+        anchorTag = pageSoup.find(lambda tag: tag.name == "a"
+            and tag.has_attr("name")
+            and tag["name"] == anchorLink)
+
+        # add new anchor link tag right after the one we found.
+        newTag = pageSoup.new_tag("a")
+        newTag["name"] = appleRef
+        anchorTag.insert_after(newTag)
 
     # make sure we have folder heirarchy or else we get no such file/directory
     if not os.path.exists(os.path.split(destinationFile)[0]):
@@ -677,14 +696,9 @@ def makeDocset(args):
 
         soup = None
 
-        # first we need modify the page for viewing with dash and save it to the documents folder
-        #modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
-        modifyAndSaveHtml(os.path.join(sourceFolder, "spark/components/Button.html"), os.path.join(documentsFolder, "spark/components/Button.html"))
-
-
-        # then we open it and search through it.
-        #with open(os.path.join(documentsFolder, pageLink), "r", encoding="utf-8") as f:
-        with open(os.path.join(documentsFolder, "spark/components/Button.html"), "r", encoding="utf-8") as f:
+        # scrape the page and get the tokens
+        #with open(os.path.join(sourceFolder, pageLink), "r", encoding="utf-8") as f:
+        with open(os.path.join(sourceFolder, "spark/components/Button.html"), "r", encoding="utf-8") as f:
 
 
             print("Parsing file {}/{}: {}".format(counter, total, pageLink))
@@ -877,11 +891,10 @@ def makeDocset(args):
             # add to list
             tokenList.extend(getTokenAnchorTupleListFromATags(constList, "clconst", pageName))
 
-        # **************************
-        # package functions
-        # **************************
-
-        # these seem to be retrieved by the "method" thing. I think we are done....
+        # now that we have gotten all of the tokens, we need to modify and save the html to the 
+        # Documents folder within the docset we created
+        # this is also where we add the anchor links for the Dash TOC (anchor links that have the appleref link        #modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
+        modifyAndSaveHtml(os.path.join(sourceFolder, "spark/components/Button.html"), os.path.join(documentsFolder, "spark/components/Button.html"), tokenList)
         break
 
     # now create the soup object that will be written to Tokens.xml
