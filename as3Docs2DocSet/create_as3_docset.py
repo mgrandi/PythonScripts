@@ -697,9 +697,9 @@ def makeDocset(args):
         soup = None
 
         # scrape the page and get the tokens
-        #with open(os.path.join(sourceFolder, pageLink), "r", encoding="utf-8") as f:
-        with open(os.path.join(sourceFolder, "spark/components/Button.html"), "r", encoding="utf-8") as f:
-
+        # TODO here we have to open the page for the first time, and we open it again when we call
+        # modifyAndSaveHtml, maybe i can just give it the soup variable to save it a bit of processing time!
+        with open(os.path.join(sourceFolder, pageLink), "r", encoding="utf-8") as f:
 
             print("Parsing file {}/{}: {}".format(counter, total, pageLink))
             counter += 1
@@ -894,8 +894,7 @@ def makeDocset(args):
         # now that we have gotten all of the tokens, we need to modify and save the html to the 
         # Documents folder within the docset we created
         # this is also where we add the anchor links for the Dash TOC (anchor links that have the appleref link        #modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink))
-        modifyAndSaveHtml(os.path.join(sourceFolder, "spark/components/Button.html"), os.path.join(documentsFolder, "spark/components/Button.html"), tokenList)
-        break
+        modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink), tokenList)
 
     # now create the soup object that will be written to Tokens.xml
     # the format of this file is
@@ -959,8 +958,8 @@ def makeDocset(args):
 
     # Cleanup the xml files as they are not needed anymore
     print("Cleaning up Nodes.xml and Tokens.xml")
-    #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
-    #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
+    os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
+    os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
 
     print("Done!")
 
