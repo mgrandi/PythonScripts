@@ -567,16 +567,17 @@ def makeDocset(args):
         @param args - the argument parser namespace object
         '''
 
-    ## Tries to find docsetutil
-    possibleDocsetutilPath= [
-        "/Developer/usr/bin/docsetutil",
-        "/Applications/Xcode.app/Contents/Developer/usr/bin/docsetutil",
-    ]
-    docsetutilPath = [path for path in possibleDocsetutilPath if os.path.exists(path)]
-    if len(docsetutilPath) == 0:
-        trouble("Could not find docsetutil. Please check for docsetutil's location and set it inside the script.")
+    if not args.noDocsetutil:
+        ## Tries to find docsetutil
+        possibleDocsetutilPath= [
+            "/Developer/usr/bin/docsetutil",
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/docsetutil",
+        ]
+        docsetutilPath = [path for path in possibleDocsetutilPath if os.path.exists(path)]
+        if len(docsetutilPath) == 0:
+            trouble("Could not find docsetutil. Please check for docsetutil's location and set it inside the script.")
 
-    docsetutilPath = docsetutilPath[0]
+        docsetutilPath = docsetutilPath[0]
 
     ## Script should run in the folder where the docs live
     sourceFolder = args.docPath
@@ -709,11 +710,22 @@ def makeDocset(args):
 
         # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
         # this also seems to have a "non breaking backspace" at the end....strip it off
-        pageName = str(soup.find(lambda tag: tag.name == "convert" 
+        className = str(soup.find(lambda tag: tag.name == "convert" 
             and tag.parent is not None
             and tag.parent.has_attr("id")
             and tag.parent["id"] == "subTitle").string).strip().replace(" ", "_") # remove excess whitespace, turn space
                                                                                 # into a _
+
+        # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
+        # get the name of the package this class belongs in
+        #packageName = str(soup.find(lambda tag: tag.name == "a"
+        #    and tag.has_attr("id")
+        #    and tag["id"] == "packageName").string).strip()
+
+        # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
+        # page name is the package name + class name
+        #pageName = packageName + "." + className
+        pageName = className
 
         # **************************
         # properties
@@ -951,15 +963,16 @@ def makeDocset(args):
         f.write(str(tokenSoup))
 
 
-    # call apple's docset utility
-    print("Calling docsetutil")
-    resultCode = subprocess.call([docsetutilPath, "index", docsetFolder])
+    if not args.noDocsetutil:
+        # call apple's docset utility
+        print("Calling docsetutil")
+        resultCode = subprocess.call([docsetutilPath, "index", docsetFolder])
 
 
-    # Cleanup the xml files as they are not needed anymore
-    print("Cleaning up Nodes.xml and Tokens.xml")
-    os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
-    os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
+        # Cleanup the xml files as they are not needed anymore
+        print("Cleaning up Nodes.xml and Tokens.xml")
+        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
+        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
 
     print("Done!")
 
@@ -969,11 +982,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="create a .docset file for the as3 documentation", 
         epilog="Copyright 2012 Mark Grandi, forked from https://github.com/gpambrozio/PythonScripts")
 
-    # optional arguments, if specified these are the input and output files, if not specified, it uses stdin and stdout
     parser.add_argument('docPath', help="the directory where the as3 documentation is located", type=verify_docpath)
     
     parser.add_argument('--outputPath', help="the directory to place the resulting .docset. defaults to os.getcwd()", type=verify_outputpath, default=os.getcwd())
     args = parser.parse_args()
+
+    parser.addArgument("--noDocsetutil", action="store_true", default=False, help="Whether or not we should attempt to run docsetutil or not.")
 
     try:
         makeDocset(args)
