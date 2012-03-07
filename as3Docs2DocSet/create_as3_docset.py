@@ -25,6 +25,7 @@ import sys
 import urllib.parse
 
 
+
 # misc variables
 htmlPagesToParse = ["all-index-A.html",
                     "all-index-B.html",
@@ -974,10 +975,24 @@ def makeDocset(args):
         os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
         os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
 
+    else:
+
+        print("Creating the token files done. You still need to run 'docsetutil index as3.docset'" +
+            " in order  for this to work with dash!")
+
     print("Done!")
 
 if __name__ == "__main__":
     # if we are being run as a real program
+
+    # the script does NOT seem to work if lxml is not installed
+    # bs4 needs lxml or else it wont be able to find elements for 
+    # some reason!
+    try:
+        import lxml
+    except ImportError as e:
+
+        trouble("lxml is not installed! the script does not seem to work without lxml, see www.lxml.de. Error: {}".format(e))
 
     parser = argparse.ArgumentParser(description="create a .docset file for the as3 documentation", 
         epilog="Copyright 2012 Mark Grandi, forked from https://github.com/gpambrozio/PythonScripts")
@@ -985,9 +1000,11 @@ if __name__ == "__main__":
     parser.add_argument('docPath', help="the directory where the as3 documentation is located", type=verify_docpath)
     
     parser.add_argument('--outputPath', help="the directory to place the resulting .docset. defaults to os.getcwd()", type=verify_outputpath, default=os.getcwd())
-    args = parser.parse_args()
+    
 
-    parser.addArgument("--noDocsetutil", action="store_true", default=False, help="Whether or not we should attempt to run docsetutil or not.")
+    parser.add_argument("--noDocsetutil", action="store_true", default=False, help="Whether or not we should attempt to run docsetutil or not.")
+
+    args = parser.parse_args()
 
     try:
         makeDocset(args)
