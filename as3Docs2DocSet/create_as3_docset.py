@@ -689,7 +689,7 @@ def makeDocset(args):
     # Interface, package -> interface (intf)
     # Style -> property (instp)
     # mobile theme styles -> property (instp)
-    # Package Function -> function (func)
+    # Package -> category (cat)
 
     counter = 1
     total = len(pages)
@@ -727,6 +727,18 @@ def makeDocset(args):
         # page name is the package name + class name
         #pageName = packageName + "." + className
         pageName = className
+
+        print("page name is ", pageName)
+
+        # here, we test to see if this is a package html page. if it is, we skip the rest of this loop 
+        # since there will not be any properties/methods etc in this html page.
+        if os.path.basename(pageLink) == "package-detail.html":
+
+            # add tuple to the list. tuple is of the format (refname, anchor)
+            tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "classSummary") )
+            continue # skip rest of this loop
+
+        
 
         # **************************
         # properties
