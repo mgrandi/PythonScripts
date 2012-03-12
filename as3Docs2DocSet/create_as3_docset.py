@@ -408,7 +408,22 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
 
     elif classType == "class":
 
-        return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "constructorDetail")
+        # need to make sure here that we have a #constructionDetail anchor, cause SOME PAGES DON'T 
+        # like flash/display/ShaderPrecision.html
+        constructorTag = soup.find(lambda tag: tag.name == "a"
+            and tag.has_attr("name")
+            and tag["name"] == "constructorDetail")
+
+        if constructorTag is not None:
+
+            # return with anchor, there is actually an anchor in the page
+            return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "constructorDetail")
+
+        else:
+
+            # return with no anchor
+            return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "")
+        
 
     else:
 
@@ -753,7 +768,7 @@ def makeDocset(args):
         # TODO here we have to open the page for the first time, and we open it again when we call
         # modifyAndSaveHtml, maybe i can just give it the soup variable to save it a bit of processing time!
         with open(os.path.join(sourceFolder, pageLink), "r", encoding="utf-8") as f:
-            
+
             print("Parsing file {}/{}: {}".format(counter, total, pageLink))
             counter += 1
 
@@ -782,8 +797,10 @@ def makeDocset(args):
         # here, we test to see if this is a package html page. 
         if os.path.basename(pageLink) == "package-detail.html":
 
+            # note that the anchor can be either "classSummary" or "interfaceSummary", so since it can 
+            # have one or both, then we just don't provide an anchor.
             # add tuple to the list. tuple is of the format (refname, anchor)
-            tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "classSummary") )
+            tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "") )
 
         else:
 
@@ -1039,8 +1056,8 @@ def makeDocset(args):
 
         # Cleanup the xml files as they are not needed anymore
         print("Cleaning up Nodes.xml and Tokens.xml")
-        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
-        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
+        #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
+        #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
 
     else:
 
