@@ -433,22 +433,18 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
 
 
 
-def modifyAndSaveHtml(sourceFile, destinationFile, tokenList):
+def modifyAndSaveHtml(soup, destinationFile, tokenList):
     '''takes a html file from the documentation, and we remove certain elements 
     and modify some attributes to make it so it actually views properly in the 
     dash viewer. This method also inserts the appleref anchor links so dash can 
     use them for the Table of Contents feature.
 
-    @param sourceFile - the original html file we are modifying
+    @param soup - the bs4 object we are using to modify the html and save it to the new location
     @param destinationFile - where we are saving the modified html
     @param tokenList - the list of tuples, of the form (appleRef, anchor) for the current page
         so that we can add appleref anchor links on the webpage.'''
 
-    pageSoup = None
-    
-    with open(sourceFile, "r", encoding="utf-8") as f:
-
-            pageSoup = BeautifulSoup(f)
+    pageSoup = soup
 
     # find the following things and remove them:
     # 1 - div id "filter_panel_float" , the thing that is above the page title (has package/clas filters)
@@ -992,7 +988,7 @@ def makeDocset(args):
         # now that we have gotten all of the tokens, we need to modify and save the html to the 
         # Documents folder within the docset we created
         # this is also where we add the anchor links for the Dash TOC (anchor links that have the appleref link 
-        modifyAndSaveHtml(os.path.join(sourceFolder, pageLink), os.path.join(documentsFolder, pageLink), tokenList)
+        modifyAndSaveHtml(soup, os.path.join(documentsFolder, pageLink), tokenList)
 
     # now create the soup object that will be written to Tokens.xml
     # the format of this file is
