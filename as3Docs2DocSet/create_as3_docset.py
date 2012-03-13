@@ -545,10 +545,7 @@ def modifyAndSaveHtml(soup, destinationFile, tokenList):
 
     # now we iterate through the tokenList, and add appleref anchor links right after the anchor links that 
     # the page already has for all the methods/properties/styles/etc, for dash's table of contents feature
-    for iterTuple in tokenList:
-
-        appleRef = iterTuple[0]
-        anchorLink = iterTuple[1]
+    for appleRef, anchorLink in tokenList:
 
         if anchorLink != "": # don't do this if we don't have an anchor
 
@@ -561,6 +558,48 @@ def modifyAndSaveHtml(soup, destinationFile, tokenList):
             newTag = pageSoup.new_tag("a")
             newTag["name"] = appleRef
             anchorTag.insert_after(newTag)
+
+    # special case for "package-detail.html" files, these don't have tokens since they are defined elsewhere, but
+    # we still want to put applref anchors here so the dash table of contents feature works when the user
+    # selects a package page.
+    if os.path.basename(destinationFile) == "package-detail.html":
+
+        findTdElInTable = lambda tag: tag.name == "a"
+            and tag.parent is not None
+            and tag.parent.name == "td"
+            and tag.parent.has_attr("class") 
+            and tag["class"] == "summaryTableSecondCol"
+
+        # find all the table tags in his page that we care about
+        tableTagContainer = pageSoup.find_all(lambda tag: tag.name == "div"
+            and tag.has_attr("class")
+            and tag["class"] == "content")
+
+        if tableTagContainer:
+            containerList = tableTagContainer.find(findTdElInTable)
+            for tmpEl in containerList:
+                # start here mark!!!!
+
+
+        # get constants
+        constantTag = tableTagContainer.find(lambda tag: tag.name == "table"
+            and tag.has_attr("id")
+            and tag["id"] == "summaryTableConstant")
+
+        # get classes
+        classesTag = tableTagContainer.find(lambda tag: tag.name == "table"
+            and tag.has_attr("id")
+            and tag["id"] == "summaryTableIdClass")
+
+        # get functions
+        functionsTag = tableTagContainer.find(lambda tag: tag.name == "table"
+            and tag.has_attr("id")
+            and tag["id"] == "summaryTableIdFunction")
+
+        # get interfaces
+        interfacesTag = tableTagContainer.find(lambda tag: tag.name == "table"
+            and tag.has_attr("id")
+            and tag["id"] == "summaryTableIdInterface")
 
     # make sure we have folder heirarchy or else we get no such file/directory
     if not os.path.exists(os.path.split(destinationFile)[0]):
