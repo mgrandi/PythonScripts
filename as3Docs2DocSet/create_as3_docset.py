@@ -787,8 +787,7 @@ def makeDocset(args):
         className = str(soup.find(lambda tag: tag.name == "convert" 
             and tag.parent is not None
             and tag.parent.has_attr("id")
-            and tag.parent["id"] == "subTitle").string).strip().replace(" ", "_") # remove excess whitespace, turn space
-                                                                                # into a _
+            and tag.parent["id"] == "subTitle").string).strip().replace(" ", "") # remove excess whitespace
 
         # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
         # get the name of the package this class belongs in
