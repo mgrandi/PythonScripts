@@ -192,7 +192,9 @@ def getPagesFromIndex(soup, pagesDict):
         urlList[5] = ""
 
         # resulting url without the fragment
-        result = urllib.parse.urlunparse(urlList)
+        # note: you have to use os.path.normpath here or else we get duplicate entries, cause we somehow get 
+        # "./String.html" and "String.html", which are the same file, but different paths!
+        result = os.path.normpath(urllib.parse.urlunparse(urlList))
 
         # check to see if its in the dict already
         if not result in pagesDict:
