@@ -384,22 +384,31 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
     @param pageName - name of the page
     @returns the tuple that we add to the token list'''
 
-    # find the <td> tag that has the class signature
-    tmp = soup.find(lambda tag: tag.name == "td" 
-        and tag.has_attr("class") 
-        and "classSignature" in tag["class"])
+    tmp = None
+    tmp2 = None
+    classType = None
 
-    # now the type of this class (whether its a package/interface) is the <td> element 
-    # that is right before this, so we use previous_sibling
-    tmp2 = tmp.previous_sibling
+    try:
+        # find the <td> tag that has the class signature
+        tmp = soup.find(lambda tag: tag.name == "td" 
+            and tag.has_attr("class") 
+            and "classSignature" in tag["class"])
 
-    # bail out if there is no previous sibling, here in case some pages are weird and don't have this element!
-    if tmp2 is None:
+        # now the type of this class (whether its a package/interface) is the <td> element 
+        # that is right before this, so we use previous_sibling
+        tmp2 = tmp.previous_sibling
 
-        raise ValueError("getClassTypeTupleFromClassSignature - couldn't find the previous sibling to get the type of class!")
+
+        classType = str(tmp2.string).lower()
+
+    except Exception as e:
+
+        # bail out if there is no previous sibling, here in case some pages are weird and don't have this element!
+        # like pages such as "package.html" or "operators.html". we still parse them for properties/methods
+        # we just don't return a class/interface token
+        return None
 
     # continue as normal
-    classType = str(tmp2.string).lower()
 
     # return token string and anchor depending on the class type
     if  classType == "interface":
@@ -807,7 +816,15 @@ def makeDocset(args):
             # **************************
 
             # adds the class or interface listing to our tokenList
-            tokenList.append(getClassTypeTupleFromClassSignature(soup, pageName))
+            # note: we do not try and get the class type for all pages, thats why we have the check
+            # to see if there is actually a tuple before we add it to tokenList. If its none then
+            # its a weird page that isn't a class/interface (like package.html, operators.html)
+            # so we don't add it
+            tmpTuple = getClassTypeTupleFromClassSignature(soup, pageName)
+
+            if tmpTuple:
+
+                tokenList.append(tmpTuple)
 
             # **************************
             # properties
