@@ -106,6 +106,21 @@ staticFiles = ["ajax-loader.gif",
 staticFolders = ["images"]
 
 
+def getUrlWithoutFragment(url):
+    ''' method that takes a url with a fragment, and returns the url
+    without the fragment
+    @param the url 
+    @return the url without the fragment'''
+
+    # get the url, have to turn it into a list cause i can't set the fragment param on a ParseResult...grumble
+    urlList = list(urllib.parse.urlparse(url))
+
+    # clear the fragment
+    urlList[5] = ""
+
+    return urllib.parse.urlunparse(urlList)
+
+
 def printTraceback():
     '''prints the traceback'''
 
@@ -185,16 +200,13 @@ def getPagesFromIndex(soup, pagesDict):
     
     for tmpTag in tagList:
 
-        # get the url, have to turn it into a list cause i can't set the fragment param on a ParseResult...grumble
-        urlList = list(urllib.parse.urlparse(tmpTag["href"]))
 
-        # clear the fragment
-        urlList[5] = ""
+        urlWithoutFrag = getUrlWithoutFragment(tmpTag["href"])
 
         # resulting url without the fragment
         # note: you have to use os.path.normpath here or else we get duplicate entries, cause we somehow get 
         # "./String.html" and "String.html", which are the same file, but different paths!
-        result = os.path.normpath(urllib.parse.urlunparse(urlList))
+        result = os.path.normpath(urlWithoutFrag)
 
         # check to see if its in the dict already
         if not result in pagesDict:
@@ -440,6 +452,33 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
 
         raise ValueError("unknown class type! {}".format(classType))
 
+# lambda that we use in addApplerefToPackageDetailPage
+findTdElInTable = (lambda tag: tag.name == "a"
+    and tag.parent is not None
+    and tag.parent.name == "td"
+    and tag.parent.has_attr("class") 
+    and "summaryTableSecondCol" in tag.parent["class"])
+
+def addApplerefToPackageDetailPage(tableTag, tokenType):
+    ''' this method adds the appleref string after the list of tags that we are given
+    after searching the table tag we are given as the argument tableTag, for package-detail.html pages 
+    @param tableTag  - the table tag bs4 object that we are given and search through
+    @param tokenType - the type of the token that we put in the appleref link, like clconst, cl, etc, 
+        see http://kapeli.com/docsets/ for all of them'''
+
+    # make sure the tag isn't none, its None if there wasn't a table in that page (as in the page doesn't
+    # have constants, functions, etc)
+    if tableTag:
+
+        # we have a table tag, get all the <a> tags we want using the predifined lambda
+        containerList = tableTag.find_all(findTdElInTable)
+        for tmpEl in containerList:
+            tmpNewTag = BeautifulSoup().new_tag("a")
+            # we don't put the page name in the last part of the appleref string
+            # since they have selected the package so they are all relative to the package they have selected.
+            tmpNewTag["name"] = "//apple_ref/cpp/{}/{}".format(tokenType, str(tmpEl.string))
+            tmpEl.insert_after(tmpNewTag) # add to page
+
 
 
 
@@ -564,42 +603,34 @@ def modifyAndSaveHtml(soup, destinationFile, tokenList):
     # selects a package page.
     if os.path.basename(destinationFile) == "package-detail.html":
 
-        findTdElInTable = lambda tag: tag.name == "a"
-            and tag.parent is not None
-            and tag.parent.name == "td"
-            and tag.parent.has_attr("class") 
-            and tag["class"] == "summaryTableSecondCol"
-
-        # find all the table tags in his page that we care about
-        tableTagContainer = pageSoup.find_all(lambda tag: tag.name == "div"
+        # find the div tag that has all the table tags.
+        tableTagContainer = pageSoup.find(lambda tag: tag.name == "div"
             and tag.has_attr("class")
-            and tag["class"] == "content")
-
-        if tableTagContainer:
-            containerList = tableTagContainer.find(findTdElInTable)
-            for tmpEl in containerList:
-                # start here mark!!!!
-
+            and "content" in tag["class"])
 
         # get constants
         constantTag = tableTagContainer.find(lambda tag: tag.name == "table"
             and tag.has_attr("id")
-            and tag["id"] == "summaryTableConstant")
+            and tag["id"] == "summaryTableIdConstant")
+        addApplerefToPackageDetailPage(constantTag, "clconst") # add after if any links exist
 
         # get classes
         classesTag = tableTagContainer.find(lambda tag: tag.name == "table"
             and tag.has_attr("id")
             and tag["id"] == "summaryTableIdClass")
+        addApplerefToPackageDetailPage(classesTag, "cl") # add after if any links exist
 
         # get functions
         functionsTag = tableTagContainer.find(lambda tag: tag.name == "table"
             and tag.has_attr("id")
             and tag["id"] == "summaryTableIdFunction")
+        addApplerefToPackageDetailPage(functionsTag, "func") # add after if any links exist
 
         # get interfaces
         interfacesTag = tableTagContainer.find(lambda tag: tag.name == "table"
             and tag.has_attr("id")
             and tag["id"] == "summaryTableIdInterface")
+        addApplerefToPackageDetailPage(interfacesTag, "intf") # add after if any links exist
 
     # make sure we have folder heirarchy or else we get no such file/directory
     if not os.path.exists(os.path.split(destinationFile)[0]):
