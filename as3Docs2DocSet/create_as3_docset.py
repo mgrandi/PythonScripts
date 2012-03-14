@@ -681,16 +681,23 @@ def copyAndModifyStaticFilesToDocs(srcFolder, destFolder):
     # copy the static to the documents directory
     for entry in staticFiles:
 
-        # have special cases 
-        if entry == "filter-style.css":
+        specialEntries = ["filter-style.css", "style.css"]
+
+        # have special cases for some css files
+        if entry in specialEntries :
 
             # here we change the css top property to be smaller so we dont have a big gap at the top
             tmpCss = None
             with open(os.path.join(srcFolder, entry), "r", encoding="utf-8") as f:
                 tmpCss = f.read()
 
-            # change the top property
-            tmpCss = re.sub("top:.*?;", "top:113px", tmpCss) # if the pattern isnt found, string is returned unchanged
+            if entry == "filter-style.css":
+                # change the top property, as suggested by Kapeli
+                tmpCss = re.sub("top:.*?;", "top:0px", tmpCss)
+            elif entry == "style.css":
+
+                # get rid of the header, as suggested by Kapeli
+                tmpCss = re.sub(".titleTable{.*}",".titleTable{width:100%; display:none}", tmpCss)
 
             # write modified file to dest directory
             with open(os.path.join(destFolder, entry), "w", encoding="utf-8") as f:
