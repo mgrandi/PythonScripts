@@ -337,9 +337,16 @@ def getTokenAnchorTupleListFromATags(tagList, refType, pageName):
 
         if tag.name =="a" and isinstance(tag, bs4.element.Tag):
 
+            finalPageName = ""
+            # if we are doing a method or a function, then add the parens to the token's name
+            if refType == "clm" or refType == "func":
+                finalPageName = pageName + "." + str(tag.string) + "()"
+            else:
+                finalPageName = pageName + "." + str(tag.string)
+
             # convert NavigableString to a str object
             # also get rid of the # infront of the href, cause we don't write it to the tokens.xml file
-            tmp = ("//apple_ref/cpp/{}/{}".format(refType, pageName + "." + str(tag.string)), tag["href"].lstrip("#"))
+            tmp = ("//apple_ref/cpp/{}/{}".format(refType, finalPageName), tag["href"].lstrip("#"))
             tokenList.append(tmp)
 
         else:
@@ -382,7 +389,7 @@ def getTokenAnchorTupleListFromSpanTags(tagList, refType, pageName, anchorPrefix
 
             # convert NavigableString to a str object
             # since we dont have a href we need to create the anchor by adding the anchorPrefix + : + the tag's string value
-            tmp = ("//apple_ref/cpp/{}/{}".format(refType, finalPageName, "{}:{}".format(anchorPrefix, str(tag.string))))
+            tmp = ("//apple_ref/cpp/{}/{}".format(refType, finalPageName), "{}:{}".format(anchorPrefix, str(tag.string)))
             tokenList.append(tmp)
 
         else:
