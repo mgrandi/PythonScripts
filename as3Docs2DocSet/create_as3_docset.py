@@ -460,6 +460,15 @@ findTdElInTable = (lambda tag: tag.name == "a"
     and tag.parent.has_attr("class") 
     and "summaryTableSecondCol" in tag.parent["class"])
 
+# lambda that we use in addApplerefToPackageDetailPage
+findTdElInTableInterface = (lambda tag: tag.name == "a"
+    and tag.parent is not None
+    and tag.parent.name == "i"
+    and tag.parent.parent is not None
+    and tag.parent.parent.name == "td"
+    and tag.parent.parent.has_attr("class") 
+    and "summaryTableSecondCol" in tag.parent.parent["class"])
+
 def addApplerefToPackageDetailPage(tableTag, tokenType):
     ''' this method adds the appleref string after the list of tags that we are given
     after searching the table tag we are given as the argument tableTag, for package-detail.html pages 
@@ -472,7 +481,15 @@ def addApplerefToPackageDetailPage(tableTag, tokenType):
     if tableTag:
 
         # we have a table tag, get all the <a> tags we want using the predifined lambda
-        containerList = tableTag.find_all(findTdElInTable)
+        # HOWEVER, due to the as3 docs SUCKING, in the package detail pages, interfaces are in italic
+        # so the parent of the <a> element is <i> , and the parent of THAT is <td> . grumble.
+        containerList = None
+        if tokenType == "intf":
+            # use different lambda to find the <a> links if it is an interface
+            containerList = tableTag.find_all(findTdElInTableInterface)
+        else:
+            containerList = tableTag.find_all(findTdElInTable)
+
         for tmpEl in containerList:
             tmpNewTag = BeautifulSoup().new_tag("a")
             # we don't put the page name in the last part of the appleref string
