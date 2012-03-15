@@ -445,22 +445,8 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
         return ("//apple_ref/cpp/{}/{}".format("intf", pageName), "")
 
     elif classType == "class":
-
-        # need to make sure here that we have a #constructionDetail anchor, cause SOME PAGES DON'T 
-        # like flash/display/ShaderPrecision.html
-        constructorTag = soup.find(lambda tag: tag.name == "a"
-            and tag.has_attr("name")
-            and tag["name"] == "constructorDetail")
-
-        if constructorTag is not None:
-
-            # return with anchor, there is actually an anchor in the page
-            return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "constructorDetail")
-
-        else:
-
-            # return with no anchor
-            return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "")
+   
+        return ("//apple_ref/cpp/{}/{}".format("cl", pageName), "")
         
 
     else:
