@@ -375,14 +375,14 @@ def getTokenAnchorTupleListFromSpanTags(tagList, refType, pageName, anchorPrefix
             finalPageName = ""
             # if we are doing a method or a function, then add the parens to the token's name
             if refType == "clm" or refType == "func":
-                finalPageName = pageName + "." + str(tag.string) + "()")
+                finalPageName = pageName + "." + str(tag.string) + "()"
             else:
-                finalPageName = pageName + "." + str(tag.string))
+                finalPageName = pageName + "." + str(tag.string)
 
 
             # convert NavigableString to a str object
             # since we dont have a href we need to create the anchor by adding the anchorPrefix + : + the tag's string value
-            tmp = ("//apple_ref/cpp/{}/{}".format(refType, finalPageName, "{}:{}".format(anchorPrefix, str(tag.string)))
+            tmp = ("//apple_ref/cpp/{}/{}".format(refType, finalPageName, "{}:{}".format(anchorPrefix, str(tag.string))))
             tokenList.append(tmp)
 
         else:
