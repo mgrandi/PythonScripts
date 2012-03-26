@@ -17,12 +17,18 @@ import os
 import os.path
 import shutil
 import subprocess
-from bs4 import BeautifulSoup
-import bs4
 import argparse
 import traceback
 import sys
 import urllib.parse
+try:
+    import bs4
+    from bs4 import BeautifulSoup
+except ImportError as e:
+    print("You need beautiful soup 4 in order to run this script! Get it from: http://www.crummy.com/software/BeautifulSoup/ (Error: {})".format(e))
+    sys.exit(1)
+
+
 
 
 
