@@ -1171,8 +1171,8 @@ def makeDocset(args):
 
         # Cleanup the xml files as they are not needed anymore
         print("Cleaning up Nodes.xml and Tokens.xml")
-        #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
-        #os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
+        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Nodes.xml"))
+        os.remove(os.path.join(docsetFolder, "Contents", "Resources", "Tokens.xml"))
 
     else:
 
