@@ -622,6 +622,17 @@ def modifyAndSaveHtml(soup, destinationFile, tokenList):
             newTag["name"] = appleRef
             anchorTag.insert_after(newTag)
 
+    # added 6/15/12, adobe in their wise ways decided to add a google bomb at the end of their page source code
+    # hidden in a <div style="display:none"> tag. So we will just remove all divs that have display:none cause 
+    # we wont see them anyway! This also includes mainContainer but we delete that attribute earlier in this
+    # method so its fine
+    displayNoneTags = pageSoup.find_all(lambda tag: tag.name == "div"
+        and tag.has_attr("style")
+        and "style:none" in tag['style'])
+    if displayNoneTags:
+        for iterTag in displayNoneTags:
+            iterTag.decompose()
+
     # special case for "package-detail.html" files, these don't have tokens since they are defined elsewhere, but
     # we still want to put applref anchors here so the dash table of contents feature works when the user
     # selects a package page.
@@ -885,10 +896,13 @@ def makeDocset(args):
 
         # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
         # this also seems to have a "non breaking backspace" at the end....strip it off
-        className = str(soup.find(lambda tag: tag.name == "convert" 
-            and tag.parent is not None
-            and tag.parent.has_attr("id")
-            and tag.parent["id"] == "subTitle").string).strip().replace(" ", "") # remove excess whitespace
+        # 6/15/12 they changed the layout of the page and where this element is located, its Classname - AS3/Flex
+        className = str(soup.find(lambda tag: tag.name == "h1" 
+            and tag.has_attr("id")
+            and tag["id"] == "classProductName").string)
+
+        # the string is formatted like this now: "Button  - AS3 Flex", we just want "Button"
+        className = className[:className.find(" ")].strip() # strip non breaking backspace or something stupid
 
         # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
         # get the name of the package this class belongs in
