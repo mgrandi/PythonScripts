@@ -1,0 +1,201 @@
+so, it seems i just need to through all of the all-index-<LETTER>.html files, and then for each entry, get the url UP TO (but not including) the /langref/ folder
+
+
+so : basically the url that the href= tags have
+
+
+don't use all-classes since it doesn't even have a link to the actual page. just use the all-index-LETTER.html pages
+
+
+
+
+so, what are we looking for in these all-index-whatever.html pages?
+
+<tr name="rowLink" runtime="AIR::2##" class="even">
+    <td class="idxrow" colspan="2">
+        <a target="_self" href="flash/net/dns/AAAARecord.html" onclick="javascript:loadClassListFrame('flash/net/dns/class-list.html');">AAAARecord</a> — class, package <a target="_self" href="flash/net/dns/package-detail.html" onclick="javascript:loadClassListFrame('flash/net/dns/class-list.html');">flash.net.dns</a>
+    </td>
+</tr>
+
+so we are looking for <tr> elements with the name "rowLink", then a <td> element under that with class idxrow, and then the stuff under that is what we want. outsideof the <a> tag, we see "class". we don't really care about what package its in.  It can be other stuff in here too, like:
+
+style: (probably a property). Note that this also has class, but its saying what class its inside, not that it IS a class. 
+
+<tr name="rowLink" class="odd">
+    <td class="idxrow" colspan="2">
+        <a target="_self" href="mx/core/ScrollControlBase.html#style:accentColor" onclick="javascript:loadClassListFrame('mx/core/class-list.html');">accentColor</a> — Style, class mx.core.<a target="_self" href="mx/core/ScrollControlBase.html" onclick="javascript:loadClassListFrame('mx/core/class-list.html');">ScrollControlBase</a>
+    </td>
+</tr>
+
+
+
+here, we see that its a property, but its also in an interface. we need some fancy regex to fix this...
+
+<tr name="rowLink" runtime="Flash::10.1##AIR::2.0##" product="Flex::4.5##" class="odd">
+    <td class="idxrow" colspan="2">
+        <a target="_self" href="spark/core/IEditableText.html#accessibilityProperties" onclick="javascript:loadClassListFrame('spark/core/class-list.html');">accessibilityProperties</a> — Property, interface spark.core.<a target="_self" href="spark/core/IEditableText.html" onclick="javascript:loadClassListFrame('spark/core/class-list.html');">IEditableText</a>
+    </td>
+</tr>
+
+
+
+TODO MARK RIGHT HERE: i need to also get the "file" that each thing belongs into, i need another regex for getting the last part of the thing, aka the "Stage" href of:
+
+addParticipantAt(participant:com.adobe.solutions.rca.domain:IStageParticipant, index:int) — method, class com.adobe.solutions.rca.domain.impl.Stage
+
+which in html is:
+
+<a target="_self" href="com/adobe/solutions/rca/domain/impl/Stage.html" onclick="javascript:loadClassListFrame('com/adobe/solutions/rca/domain/impl/class-list.html');">Stage</a>
+
+I MIGHT be able to get this using bs4 instead of a regex. just get the last child that is an <a> element!
+    NOTE: for some things like events, this href ends with package-detail.html or class-detail.html NEED TO FIGURE OUT IF THESE ARE RIGHT OR IF I NEED TO MODIFY THEM SOME like here:
+
+    [<a href="com/adobe/icc/editors/events/AssetValidationEvent.html" onclick="javascript:loadClassListFrame('com/adobe/icc/editors/events/class-list.html');" target="_self">AssetValidationEvent</a>,
+ ' — class, package ',
+ <a href="com/adobe/icc/editors/events/package-detail.html" onclick="javascript:loadClassListFrame('com/adobe/icc/editors/events/class-list.html');" target="_self">com.adobe.icc.editors.events</a>]
+
+ its an event, and its main page should be the constructor inside AssetValidationEvent.html, but its last <a> tag just points to the class-list.html, which is not correct. It seems to only do this for "class" types, and then the constructor has the right page. hmmmm..
+
+ i also have to rethink hiow i'm going about this. i need anchors in each page, EACH PAGE, since not all things have them (like events). so i think i just need to go through the package list, the class list, and anything else (does that include top level functions and package functions?) and get the urls, and then parse them from there. fuck.
+
+
+ new plan:
+
+ go through all the all-index-LETTER.html pages. the first child of the <td> element, the link minus the fragment is the url we want to add to the pages we want to scrape. get all of those, and then just parse each page for the stuff.
+
+ check the class, if its hidden, then don't include it.
+
+properties:
+    <table id="summaryTableProperty">
+        <td class="summaryTableSignatureCol"></td>
+
+
+    summaryTableSignatureCol
+
+    hidden: hideInheritedProperty
+
+
+ methods:
+
+    <table id="summaryTableMethod">
+        <td class="summaryTableSignatureCol"></td>
+
+        summaryTableSignatureCol / summarySignature
+
+        hidden: hideInheritedMethod
+
+protected methods:
+
+    <table id="summaryTableProtectedMethod">
+        <td class="summaryTableSignatureCol"></td>
+
+        summaryTableSignatureCol / summarySignature
+
+        hidden: hideInheritedProtectedMethod
+
+events:
+    <table id="summaryTableEvent">
+          <td class="summaryTableSignatureCol"></td>
+
+        summaryTableSignatureCol / summarySignature
+
+        hidden: hideInheritedEvent
+          
+style (spark and mx)
+    <table id="summaryTablesparkStyle">
+          <td class="summaryTableSignatureCol"></td>   
+
+          summaryTableSignatureCol / summarySignature
+
+          NOTE: MX ONES DON'T HAVE LINKS, HERE WE HAVE TO WRITE AN ANCHOR
+
+          hidden: hideInheritedcommonStyle
+
+skin part:
+
+    table id: id="summaryTableSkinPart"
+
+        summaryTableSignatureCol / summarySignature (is this the same for everything else?)
+
+        hidden: hideInheritedSkinPart
+
+skin states:
+
+    table id: summaryTableSkinState
+        summaryTableSignatureCol / summarySignature
+
+        hidden: hideInheritedSkinState
+
+effects:
+
+    table id: summaryTableEffect
+        summaryTableSignatureCol / summarySignature
+
+        hidden: hideInheritedEffect
+
+constants:
+
+    table id: summaryTableConstant
+
+        summaryTableSignatureCol 
+
+        hidden: hideInheritedConstant
+
+HAVE TO DETECT FOR the top level functions page: package.html
+
+      
+
+
+
+
+
+
+
+so, for each <td> element:
+
+    get the href from child at index 0, thatis the url. 
+        get the anchor too and store that somewhere. maybe just store the url as a url.parse.url object
+    then somehow get the <td> and its children as a string, run the regex on it, or just run a regex the .strings generator.
+
+so the possible types are:
+
+
+Constant Static Property -> constant
+Property-> property
+Skin Part -> property
+Event -> binding
+Class -> class
+method -> method
+Interface, package -> interface
+Style -> property
+Package Function -> func
+
+package -> category
+
+it doesn't matter what comes after the , because if its a method on an interface, we dont care, it just shows up as a method. Only the top level thing will show up as an interface. 
+
+
+
+WE NEED TO GO THROUGH THE PACKAGE LIST AND GET TEH 'CATEGORIES'
+
+
+
+the text describing what it is is always the second child (index 1) of the <td> element that we want contents. UNLESS its a constructor, then it can have a lot, before we get to the --. we can just try searching for the —
+
+THIS IS THE REGULAR EXPRESSION FUCK FUCK
+
+r''' —(.*?),'''
+
+
+
+
+
+div id "filter_panel_float"
+div id splitter
+div id mainleft
+
+and in the <div with the id "maincontainer", get rid of the style="display;none"
+
+
+divs with the following ids should be hidden:
+
