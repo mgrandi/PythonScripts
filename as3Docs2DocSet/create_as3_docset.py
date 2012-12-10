@@ -21,7 +21,7 @@ import argparse
 import traceback
 import sys
 import urllib.parse
-from multiprocessing import Pool, Lock, Value
+from multiprocessing import Pool, Lock, Value, Manager
 from ctypes import c_int, c_wchar_p
 try:
     import bs4
@@ -117,13 +117,20 @@ staticFolders = ["images"]
 
 # multiprocessing variables and stuff
 # the pool is created later or else it doesn't know about asyncScrapePage
-counter = Value(c_int)  # int, need lock for this since we load and incement. 
+
+# THIS IS WHERE WE GET ALL OF THE VARIABLES THAT HAVE TO BE ACCESSED FROM DIFFERENT PROCESSES
+# IF THEY ARN'T CREATED USING manager THEN IT WONT WORK
+manager = Manager()
+
+counter = manager.Value(c_int, 0)  # int, need lock for this since we load and incement. 
                         # see http://stackoverflow.com/questions/1233222/python-multiprocessing-easy-way-to-implement-a-simple-counter
 counter.value = 1
-counterLock  = Lock() 
-total = Value(c_int) # int, don't need lock as we set only once
-sourceFolder = Value(c_wchar_p) # string, don't need lock for this, we set only once
-documentsFolder = Value(c_wchar_p) # string , don't need lock for this, we set only once
+counterLock  = manager.Lock() 
+total = manager.Value(c_int, 0) # int, don't need lock as we set only once
+sourceFolder = manager.Value(c_wchar_p, "") # string, don't need lock for this, we set only once
+documentsFolder = manager.Value(c_wchar_p, "") # string , don't need lock for this, we set only once
+pages = manager.dict()
+
 
 def getUrlWithoutFragment(url):
     ''' method that takes a url with a fragment, and returns the url
@@ -747,6 +754,9 @@ def copyAndModifyStaticFilesToDocs(srcFolder, destFolder):
                 # get rid of the header, as suggested by Kapeli
                 tmpCss = re.sub(".titleTable{.*}",".titleTable{width:100%; display:none}", tmpCss)
 
+                # remove overflow:hidden so the pages scroll properly in dash
+                tmpCss = re.sub("overflow:hidden;?", "", tmpCss)
+
             # write modified file to dest directory
             with open(os.path.join(destFolder, entry), "w", encoding="utf-8") as f:
                 f.write(tmpCss)
@@ -761,14 +771,14 @@ def copyAndModifyStaticFilesToDocs(srcFolder, destFolder):
         shutil.copytree(os.path.join(srcFolder, entry), os.path.join(destFolder, entry))
 
 
-def asyncScrapePage(theTuple):
+def asyncScrapePage(dictKey):
     ''' we are moving the majority of the code into here so we can use 
     multiprocessing.Pool and have mutliple processes do the scraping.
     So multiple processes will be executing this function, all of the multiprocessing
     variables are defined before makeDocset()
-    @param theTuple - the tuple that gets passed in by map(), the values: 
-        pageLinkStr - the 'key' of the pages dictionary
-        tokenTupleList - the 'value' of the pages dictionary'''
+    @param dictKey - the key to the 'pages' dictionary that we get passed in by map
+     we use this to access the actual shared list in 'pages' that we can modify and share between
+     processes'''
 
     # now we need to iterate through the pages dictionary and parse each 'pageLink',
     # adding the token string to the list that is the value for every key in the pages dict
@@ -793,261 +803,263 @@ def asyncScrapePage(theTuple):
     # Package -> category (cat)
 
     try:
-        for tmpValue in theTuple:
 
-            pageLink = theTuple[0]
-            tokenList = theTuple[1]
+        pageLink = dictKey
+        tokenList = [] # need to assign this back to our shared list in the pages dict for it to properly 
+        # sync between processes
 
-            # here we use the same soup object for scraping and passing to modifyAndSaveHtml to save processing time
-            soup = None
+        # here we use the same soup object for scraping and passing to modifyAndSaveHtml to save processing time
+        soup = None
 
-            print(sourceFolder.value)
-            # scrape the page and get the tokens
-            with open(os.path.join(sourceFolder.value, pageLink), "r", encoding="utf-8") as f:
-
-
-                pid = None
-                if hasattr(os, 'getppid'):  # only available on Unix
-                    pid = os.getppid()
-                pid = os.getpid()
-                # since this function gets called in different processes we need to make sure
-                # that the counter isnt locked (since counter is a Value, like an atomic variable in java)
-                with counterLock:
-                    print("PID: {} - Parsing file {}/{}: {}".format(pid, counter.value, total.value, pageLink))
-                    counter.value += 1
+        # scrape the page and get the tokens
+        with open(os.path.join(sourceFolder.value, pageLink), "r", encoding="utf-8") as f:
 
 
-                # make the beautifulsoup object that reprsents the html
-                soup = BeautifulSoup(f)
+            pid = None
+            if hasattr(os, 'getppid'):  # only available on Unix
+                pid = os.getppid()
+            pid = os.getpid()
+            # since this function gets called in different processes we need to make sure
+            # that the counter isnt locked (since counter is a Value, like an atomic variable in java)
+            with counterLock:
+                print("PID: {} - Parsing file {}/{}: {}".format(pid, counter.value, total.value, pageLink))
+                counter.value += 1
 
-            # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
-            # this also seems to have a "non breaking backspace" at the end....strip it off
-            # 6/15/12 they changed the layout of the page and where this element is located, its Classname - AS3/Flex
-            className = str(soup.find(lambda tag: tag.name == "h1" 
-                and tag.has_attr("id")
-                and tag["id"] == "classProductName").string)
 
-            # the string is formatted like this now: "Button  - AS3 Flex", we just want "Button"
-            className = className[:className.find(" ")].strip() # strip non breaking backspace or something stupid
+            # make the beautifulsoup object that reprsents the html
+            soup = BeautifulSoup(f)
 
-            # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
-            # get the name of the package this class belongs in
-            #packageName = str(soup.find(lambda tag: tag.name == "a"
-            #    and tag.has_attr("id")
-            #    and tag["id"] == "packageName").string).strip()
+        # name of the page/class, the big "title" thing on the grey bar, like "JSON" or "Top Level"
+        # this also seems to have a "non breaking backspace" at the end....strip it off
+        # 6/15/12 they changed the layout of the page and where this element is located, its Classname - AS3/Flex
+        className = str(soup.find(lambda tag: tag.name == "h1" 
+            and tag.has_attr("id")
+            and tag["id"] == "classProductName").string)
 
-            # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
-            # page name is the package name + class name
-            #pageName = packageName + "." + className
-            pageName = className
+        # the string is formatted like this now: "Button  - AS3 Flex", we just want "Button"
+        className = className[:className.find(" ")].strip() # strip non breaking backspace or something stupid
 
-            # here, we test to see if this is a package html page. 
-            if os.path.basename(pageLink) == "package-detail.html":
+        # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
+        # get the name of the package this class belongs in
+        #packageName = str(soup.find(lambda tag: tag.name == "a"
+        #    and tag.has_attr("id")
+        #    and tag["id"] == "packageName").string).strip()
 
-                # note that the anchor can be either "classSummary" or "interfaceSummary", so since it can 
-                # have one or both, then we just don't provide an anchor.
-                # add tuple to the list. tuple is of the format (refname, anchor)
-                tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "") )
+        # NOTE: uncomment if we want to make this use the full qualified classname as the pageName.
+        # page name is the package name + class name
+        #pageName = packageName + "." + className
+        pageName = className
 
-            else:
+        # here, we test to see if this is a package html page. 
+        if os.path.basename(pageLink) == "package-detail.html":
 
-                # normal page, find props/styles/etc
+            # note that the anchor can be either "classSummary" or "interfaceSummary", so since it can 
+            # have one or both, then we just don't provide an anchor.
+            # add tuple to the list. tuple is of the format (refname, anchor)
+            tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "") )
 
-                # **************************
-                # type of page (class or interface)
-                # **************************
+        else:
 
-                # adds the class or interface listing to our tokenList
-                # note: we do not try and get the class type for all pages, thats why we have the check
-                # to see if there is actually a tuple before we add it to tokenList. If its none then
-                # its a weird page that isn't a class/interface (like package.html, operators.html)
-                # so we don't add it
-                tmpTuple = getClassTypeTupleFromClassSignature(soup, pageName)
+            # normal page, find props/styles/etc
 
-                if tmpTuple:
+            # **************************
+            # type of page (class or interface)
+            # **************************
 
-                    tokenList.append(tmpTuple)
+            # adds the class or interface listing to our tokenList
+            # note: we do not try and get the class type for all pages, thats why we have the check
+            # to see if there is actually a tuple before we add it to tokenList. If its none then
+            # its a weird page that isn't a class/interface (like package.html, operators.html)
+            # so we don't add it
+            tmpTuple = getClassTypeTupleFromClassSignature(soup, pageName)
 
-                # **************************
-                # properties
-                # **************************
+            if tmpTuple:
 
-                # get the table tag 
-                propertyTableTag = getTableTag("summaryTableProperty", soup)
+                tokenList.append(tmpTuple)
 
-                if propertyTableTag:
-                    # get the tag list
-                    propList = getTagListFormatOne(propertyTableTag, "a", "hideInheritedProperty")
+            # **************************
+            # properties
+            # **************************
 
-                    # add it to tokenlist
-                    tokenList.extend(getTokenAnchorTupleListFromATags(propList, "instp", pageName))
+            # get the table tag 
+            propertyTableTag = getTableTag("summaryTableProperty", soup)
+
+            if propertyTableTag:
+                # get the tag list
+                propList = getTagListFormatOne(propertyTableTag, "a", "hideInheritedProperty")
+
+                # add it to tokenlist
+                tokenList.extend(getTokenAnchorTupleListFromATags(propList, "instp", pageName))
+            
+            # **************************
+            # protected properties
+            # **************************
+
+
+            # get the table tag first. This code seems to be the same as the properties one, only with different ids
+            protPropertyTableTag = getTableTag("summaryTableProtectedProperty", soup)
+
+            # only continue if we actually have a table tag (and therefore properties)
+            if protPropertyTableTag:
+
+                # get as list
+                protPropList = getTagListFormatOne(protPropertyTableTag, "a", "hideInheritedProtectedProperty")
+
+                # add to token list
+                tokenList.extend(getTokenAnchorTupleListFromATags(protPropList, "instp", pageName))
+
+
+            # **************************
+            # methods
+            # **************************
+
+            # get table tag for protected methods
+            methodTableTag = getTableTag("summaryTableMethod", soup)
+
+            # make sure we actually have methods
+            if methodTableTag:
+
+                # get as list
+                methodList = getTagListFormatTwo(methodTableTag, "a", "hideInheritedMethod")
+
+                # add to token list
+                tokenList.extend(getTokenAnchorTupleListFromATags(methodList, "clm", pageName))
                 
-                # **************************
-                # protected properties
-                # **************************
+
+            # **************************
+            # protected methods
+            # **************************
+
+            # get table tag for methods. The following code is pretty much the same as the "methods" only with different ID's and such
+            protMethodTableTag = getTableTag("summaryTableProtectedMethod", soup)
+
+            # make sure we actually have protected methods
+            if protMethodTableTag:
+
+                # get as list
+                protMethodList = getTagListFormatTwo(protMethodTableTag, "a", "hideInheritedProtectedMethod")
+
+                # add to token list
+                tokenList.extend(getTokenAnchorTupleListFromATags(protMethodList, "clm", pageName))
 
 
-                # get the table tag first. This code seems to be the same as the properties one, only with different ids
-                protPropertyTableTag = getTableTag("summaryTableProtectedProperty", soup)
+            # **************************
+            # events
+            # **************************
 
-                # only continue if we actually have a table tag (and therefore properties)
-                if protPropertyTableTag:
+            # get table tag
+            eventTableTag = getTableTag("summaryTableEvent", soup)
 
-                    # get as list
-                    protPropList = getTagListFormatOne(protPropertyTableTag, "a", "hideInheritedProtectedProperty")
+            # make sure we actually have events
+            if eventTableTag:
 
-                    # add to token list
-                    tokenList.extend(getTokenAnchorTupleListFromATags(protPropList, "instp", pageName))
+                # get as list
+                eventList = getTagListFormatTwo(eventTableTag, "a", "hideInheritedEvent")
 
-
-                # **************************
-                # methods
-                # **************************
-
-                # get table tag for protected methods
-                methodTableTag = getTableTag("summaryTableMethod", soup)
-
-                # make sure we actually have methods
-                if methodTableTag:
-
-                    # get as list
-                    methodList = getTagListFormatTwo(methodTableTag, "a", "hideInheritedMethod")
-
-                    # add to token list
-                    tokenList.extend(getTokenAnchorTupleListFromATags(methodList, "clm", pageName))
-                    
-
-                # **************************
-                # protected methods
-                # **************************
-
-                # get table tag for methods. The following code is pretty much the same as the "methods" only with different ID's and such
-                protMethodTableTag = getTableTag("summaryTableProtectedMethod", soup)
-
-                # make sure we actually have protected methods
-                if protMethodTableTag:
-
-                    # get as list
-                    protMethodList = getTagListFormatTwo(protMethodTableTag, "a", "hideInheritedProtectedMethod")
-
-                    # add to token list
-                    tokenList.extend(getTokenAnchorTupleListFromATags(protMethodList, "clm", pageName))
+                # add to token list
+                tokenList.extend(getTokenAnchorTupleListFromATags(eventList, "binding", pageName))
 
 
-                # **************************
-                # events
-                # **************************
+            # **************************
+            # styles
+            # **************************
 
-                # get table tag
-                eventTableTag = getTableTag("summaryTableEvent", soup)
+            # get tables tag ( three of them)
+            styleTableTag = getTableTag(["summaryTablecommonStyle", "summaryTablesparkStyle", "summaryTablemobileStyle"], soup)
 
-                # make sure we actually have events
-                if eventTableTag:
+            # make sure we actually have styles
+            if styleTableTag:
 
-                    # get as list
-                    eventList = getTagListFormatTwo(eventTableTag, "a", "hideInheritedEvent")
+                # get as list, where we exclude all elements whose class is in our list
+                # here get span tags cause classes that have styles as links inherited them and we dont want 
+                # inherited stuff
+                styleTwoList = getTagListFormatTwo(styleTableTag, "span", ["hideInheritedcommonStyle", "hideInheritedmobileStyle", "hideInheritedsparkStyle"])
 
-                    # add to token list
-                    tokenList.extend(getTokenAnchorTupleListFromATags(eventList, "binding", pageName))
+                # add to token list. note these are span tags so we need a diff method
+                # anchors are in style of "style:SomethingHere"
+                tokenList.extend(getTokenAnchorTupleListFromSpanTags(styleTwoList, "instp", pageName, "style"))
 
+            # **************************
+            # skin parts
+            # **************************
 
-                # **************************
-                # styles
-                # **************************
+            # get table tag
+            skinPartTableTag = getTableTag("summaryTableSkinPart", soup)
 
-                # get tables tag ( three of them)
-                styleTableTag = getTableTag(["summaryTablecommonStyle", "summaryTablesparkStyle", "summaryTablemobileStyle"], soup)
+            # if we have skin parts:
+            if skinPartTableTag:
 
-                # make sure we actually have styles
-                if styleTableTag:
+                # get as list
+                # here we only get span tags, cause the classes that have skin parts as links, have inherited the 
+                # skin parts from another class and we don't want inherited props
+                skinPartList = getTagListFormatTwo(skinPartTableTag, "span", "hideInheritedSkinPart")
 
-                    # get as list, where we exclude all elements whose class is in our list
-                    # here get span tags cause classes that have styles as links inherited them and we dont want 
-                    # inherited stuff
-                    styleTwoList = getTagListFormatTwo(styleTableTag, "span", ["hideInheritedcommonStyle", "hideInheritedmobileStyle", "hideInheritedsparkStyle"])
+                # add to list
+                # anchor is in style of "SkinPart:SomethingHere"
+                tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinPartList, "instp", pageName, "SkinPart"))
 
-                    # add to token list. note these are span tags so we need a diff method
-                    # anchors are in style of "style:SomethingHere"
-                    tokenList.extend(getTokenAnchorTupleListFromSpanTags(styleTwoList, "instp", pageName, "style"))
+            # **************************
+            # skin states
+            # **************************
 
-                # **************************
-                # skin parts
-                # **************************
+            # get table tag
+            skinStateTableTag = getTableTag("summaryTableSkinState", soup)
 
-                # get table tag
-                skinPartTableTag = getTableTag("summaryTableSkinPart", soup)
+            # if we have skin states
+            if skinStateTableTag:
 
-                # if we have skin parts:
-                if skinPartTableTag:
+                # get as list
+                # here we only get span tags cause the classes that have skin states as links have inherited the 
+                # skin states from another class and we don't want inherited stuff
+                skinStateList = getTagListFormatTwo(skinStateTableTag, "span", "hideInheritedSkinState")
 
-                    # get as list
-                    # here we only get span tags, cause the classes that have skin parts as links, have inherited the 
-                    # skin parts from another class and we don't want inherited props
-                    skinPartList = getTagListFormatTwo(skinPartTableTag, "span", "hideInheritedSkinPart")
-
-                    # add to list
-                    # anchor is in style of "SkinPart:SomethingHere"
-                    tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinPartList, "instp", pageName, "SkinPart"))
-
-                # **************************
-                # skin states
-                # **************************
-
-                # get table tag
-                skinStateTableTag = getTableTag("summaryTableSkinState", soup)
-
-                # if we have skin states
-                if skinStateTableTag:
-
-                    # get as list
-                    # here we only get span tags cause the classes that have skin states as links have inherited the 
-                    # skin states from another class and we don't want inherited stuff
-                    skinStateList = getTagListFormatTwo(skinStateTableTag, "span", "hideInheritedSkinState")
-
-                    # add to list
-                    # anchors are of the format "SkinState:SomethingHere"
-                    tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinStateList, "instp", pageName, "SkinState"))
+                # add to list
+                # anchors are of the format "SkinState:SomethingHere"
+                tokenList.extend(getTokenAnchorTupleListFromSpanTags(skinStateList, "instp", pageName, "SkinState"))
 
 
-                # **************************
-                # effects
-                # **************************
+            # **************************
+            # effects
+            # **************************
 
-                # get table tag
-                effectTableTag = getTableTag("summaryTableEffect", soup)
+            # get table tag
+            effectTableTag = getTableTag("summaryTableEffect", soup)
 
-                # if we have effects
-                if effectTableTag:
+            # if we have effects
+            if effectTableTag:
 
-                    # get as list
-                    # here we only get span tags cause the classes that have effects as links have inherited the 
-                    # effect from another class and we don't want inherited stuff
-                    effectList = getTagListFormatTwo(effectTableTag, "span", "hideInheritedEffect")
+                # get as list
+                # here we only get span tags cause the classes that have effects as links have inherited the 
+                # effect from another class and we don't want inherited stuff
+                effectList = getTagListFormatTwo(effectTableTag, "span", "hideInheritedEffect")
 
-                    # add to list
-                    # anchors are of the format "effect:SomethingHere"
-                    tokenList.extend(getTokenAnchorTupleListFromSpanTags(effectList, "instp", pageName, "effect"))
+                # add to list
+                # anchors are of the format "effect:SomethingHere"
+                tokenList.extend(getTokenAnchorTupleListFromSpanTags(effectList, "instp", pageName, "effect"))
 
-                # **************************
-                # constants
-                # **************************
+            # **************************
+            # constants
+            # **************************
 
-                # get table tag
-                constTableTag = getTableTag("summaryTableConstant", soup)
+            # get table tag
+            constTableTag = getTableTag("summaryTableConstant", soup)
 
-                # if we have constants:
-                if constTableTag:
+            # if we have constants:
+            if constTableTag:
 
-                    # get as list
-                    constList = getTagListFormatOne(constTableTag, "a", "hideInheritedConstant")
+                # get as list
+                constList = getTagListFormatOne(constTableTag, "a", "hideInheritedConstant")
 
-                    # add to list
-                    tokenList.extend(getTokenAnchorTupleListFromATags(constList, "clconst", pageName))
+                # add to list
+                tokenList.extend(getTokenAnchorTupleListFromATags(constList, "clconst", pageName))
 
-            # now that we have gotten all of the tokens, we need to modify and save the html to the 
-            # Documents folder within the docset we created
-            # this is also where we add the anchor links for the Dash TOC (anchor links that have the appleref link 
-            modifyAndSaveHtml(soup, os.path.join(documentsFolder.value, pageLink), tokenList)
+        # now that we have gotten all of the tokens, we need to modify and save the html to the 
+        # Documents folder within the docset we created
+        # this is also where we add the anchor links for the Dash TOC (anchor links that have the appleref link 
+        modifyAndSaveHtml(soup, os.path.join(documentsFolder.value, pageLink), tokenList)
+
+        # reassign the tokenList to our shared list (within the shared pages dict)
+        pages[pageLink] = tokenList
     except Exception as e:
         print(e)
         exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -1076,7 +1088,7 @@ def makeDocset(args):
 
     
     #import pdb;pdb.set_trace()
-    global sourceFolder # note this is a multiprocessing.Value object
+    global sourceFolder # note this is a manager.Value object
     sourceFolder.value = args.docPath
 
     # destination folder of the main as3.docset folder/file/thing
@@ -1140,7 +1152,7 @@ def makeDocset(args):
         """.format(modindexPath))
 
     # var to the  Documents folder inside the .docset file
-    global documentsFolder # note this is a multiprocessing.Value object
+    global documentsFolder # note this is a manager.Value object
     documentsFolder.value = os.path.join(resourcesFolder ,"Documents")
 
     # copy over static files, images, scripts, pages that don't get transferred automatically
@@ -1151,7 +1163,8 @@ def makeDocset(args):
     # key is the html files path, and value is a list of 
     # tuple objects, the first value is the strings that will will be of the format //apple_ref/language/type/name
     # that identifies the various classes, properties, styles, etc inside each html file. The second is the 'anchor'
-    pages = {}
+
+    # NOTE: pages is a dictionary, and is manager.dict object
 
     print("Figuring out what files we need to parse")
     # get all the pages that we need to parse. uses the htmlPagesToParse list defined at the top
@@ -1168,8 +1181,11 @@ def makeDocset(args):
     # set the total number of pages. This is a multiprocessing.Value object
     total.value = len(pages)
 
+    # only send the KEY of the pages dict (which is the html file's path), and then
+    # in asyncScrapePage, we can use that key to get the list that we want to modify 
+    # from the shared pages dict.
     # split the work among multiple processes
-    pool.map(asyncScrapePage, pages.items())
+    pool.map(asyncScrapePage, pages.keys())
   
     # now create the soup object that will be written to Tokens.xml
     # the format of this file is
@@ -1180,6 +1196,7 @@ def makeDocset(args):
     #           <Anchor>
     #   ... more <File> tags
 
+    import pdb;pdb.set_trace()
     # bs4 object that will represent the xml file we are creating. 
     tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?> 
     <Tokens version="1.0"></Tokens>''', "xml") # this requires bs4 beta 9 at least or else the xml declaration is bugged.
