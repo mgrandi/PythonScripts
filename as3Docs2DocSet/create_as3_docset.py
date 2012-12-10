@@ -108,8 +108,10 @@ staticFiles = ["ajax-loader.gif",
     "mxml-tag-detail.html",
     "mxml-tags.html",
     "runtimeErrors.html",
-    "specialTypes.html",
-    "TimedTextTags.html"]
+    "specialTypes.html"
+    #"TimedTextTags.html"
+    ]
+
 
 staticFolders = ["images"]
 
