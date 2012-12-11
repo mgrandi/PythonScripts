@@ -129,6 +129,11 @@ counterLock  = manager.Lock()
 total = manager.Value(c_int, 0) # int, don't need lock as we set only once
 sourceFolder = manager.Value(c_wchar_p, "") # string, don't need lock for this, we set only once
 documentsFolder = manager.Value(c_wchar_p, "") # string , don't need lock for this, we set only once
+
+# dictionary that will hold the pages
+# key is the html files path, and value is a list of 
+# tuple objects, the first value is the strings that will will be of the format //apple_ref/language/type/name
+# that identifies the various classes, properties, styles, etc inside each html file. The second is the 'anchor'
 pages = manager.dict()
 
 
@@ -237,7 +242,6 @@ def getPagesFromIndex(soup, pagesDict):
         # check to see if its in the dict already
         if not result in pagesDict:
             pagesDict[result] = [] # give it an empty list as a value for later on
-
     
 def getTableTag(tableId, soup):
     ''' gets a <table> tag from the bs4 soup with a specified id.
@@ -1159,10 +1163,7 @@ def makeDocset(args):
     # and modify them if necessary
     copyAndModifyStaticFilesToDocs(sourceFolder.value, documentsFolder.value)
 
-    # dictionary that will hold the pages
-    # key is the html files path, and value is a list of 
-    # tuple objects, the first value is the strings that will will be of the format //apple_ref/language/type/name
-    # that identifies the various classes, properties, styles, etc inside each html file. The second is the 'anchor'
+    
 
     # NOTE: pages is a dictionary, and is manager.dict object
 
@@ -1177,6 +1178,8 @@ def makeDocset(args):
             soup = BeautifulSoup(f)
 
             getPagesFromIndex(soup, pages)
+
+
 
     # set the total number of pages. This is a multiprocessing.Value object
     total.value = len(pages)
@@ -1196,7 +1199,7 @@ def makeDocset(args):
     #           <Anchor>
     #   ... more <File> tags
 
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
     # bs4 object that will represent the xml file we are creating. 
     tokenSoup = BeautifulSoup('''<?xml version="1.0" encoding="UTF-8"?> 
     <Tokens version="1.0"></Tokens>''', "xml") # this requires bs4 beta 9 at least or else the xml declaration is bugged.
@@ -1205,9 +1208,7 @@ def makeDocset(args):
     soupTokensTag = tokenSoup.find("Tokens")
 
     # go through our pages dictionary
-    for pageHref, tmpResult in pages.items():
-
-        tokenList = tmpResult[2] # its the 3rd entry in the tuple
+    for pageHref, tokenList in pages.items():
 
         # the file tag that will contain everything for this page
         fileTag = tokenSoup.new_tag("File", path=pageHref)
