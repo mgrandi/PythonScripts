@@ -15,7 +15,7 @@ This script uses BeautifulSoup (http://www.crummy.com/software/BeautifulSoup/) a
 * Download the documentation for the version you want [here](http://www.adobe.com/devnet/actionscript/references.html). You should download the zip file for the HTML version of the docs.
 * Expand the documentation somewhere.
 * Open terminal and cd to the folder where you expanded the docs.
-* Run the script from this folder.
+* Run the script from this folder. Use --help to list the necessary arguments. Note that --numberOfProcesses can drastically speed things up if you have multiple physical cpu cores in your computer!
 * The script will create a as3.docset bundle with all the necessary files.
 * Move the python.docset bundle to some folder. I recommend ~/Library/Developer/Shared/Documentation/DocSets
 * Go to dash's preferences -> docsets, then click the + and select the as3.docset bundle you just saved somewhere

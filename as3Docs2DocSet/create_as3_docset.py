@@ -1072,11 +1072,14 @@ def asyncScrapePage(dictKey):
         traceback.print_exception(exc_type, exc_value, exc_traceback)
 
 
-pool = Pool(processes=4)
+
 def makeDocset(args):
     ''' does the work to make the docset
         @param args - the argument parser namespace object
         '''
+    pool = Pool(processes=args.numberOfProcesses)
+
+    print("using {} process(es) to scrape the html pages".format(args.numberOfProcesses))
 
     if not args.noDocsetutil:
         ## Tries to find docsetutil
@@ -1101,7 +1104,12 @@ def makeDocset(args):
 
     ## Clean up first if the output folders already exist
     if os.path.exists(docsetFolder):
-        shutil.rmtree(docsetFolder)
+        if (args.deleteExisting):
+            print("removing old output folders at {}".format(docsetFolder))
+            shutil.rmtree(docsetFolder)
+        else:
+            print("[ERROR]: the output docset already exists at {} and --deleteExisting was not set, so i'm NOT overwriting it!".format(docsetFolder))
+            sys.exit(1)
 
     print("Docset being saved to: {}".format(docsetFolder))
 
@@ -1284,6 +1292,13 @@ if __name__ == "__main__":
     
 
     parser.add_argument("--noDocsetutil", action="store_true", default=False, help="Whether or not we should attempt to run docsetutil or not.")
+
+    parser.add_argument("--numberOfProcesses", type=int, default=1,  nargs="?", help="the number of processes to use to scrape the docs. You should only \
+                        use as many processes as you have PHYSICAL cores on your machine. An additional process is spawned to help with data \
+                        sharing in addition to the main python process (so if you select 2, you have 4 processes, but only 2 doing the grunt work")
+
+    parser.add_argument("--deleteExisting", action="store_true", default=False, help="Whether or not to delete any existing output folders that may \
+                        already exist in the specified outputPath, or to error out and exit")
 
     args = parser.parse_args()
 
