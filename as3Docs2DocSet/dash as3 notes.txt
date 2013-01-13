@@ -163,14 +163,14 @@ so the possible types are:
 Constant Static Property -> constant
 Property-> property
 Skin Part -> property
-Event -> binding
+Event -> Event
 Class -> class
 method -> method
-Interface, package -> interface
+Interface, package -> Interface
 Style -> property
 Package Function -> func
 
-package -> category
+package -> Package
 
 it doesn't matter what comes after the , because if its a method on an interface, we dont care, it just shows up as a method. Only the top level thing will show up as an interface. 
 
