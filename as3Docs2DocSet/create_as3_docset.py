@@ -472,7 +472,7 @@ def getClassTypeTupleFromClassSignature(soup, pageName):
     # return token string and anchor depending on the class type
     if  classType == "interface":
 
-        return ("//apple_ref/cpp/{}/{}".format("intf", pageName), "")
+        return ("//apple_ref/cpp/{}/{}".format("Interface", pageName), "")
 
     elif classType == "class":
    
@@ -514,7 +514,7 @@ def addApplerefToPackageDetailPage(tableTag, tokenType):
         # HOWEVER, due to the as3 docs SUCKING, in the package detail pages, interfaces are in italic
         # so the parent of the <a> element is <i> , and the parent of THAT is <td> . grumble.
         containerList = None
-        if tokenType == "intf":
+        if tokenType == "Interface":
             # use different lambda to find the <a> links if it is an interface
             containerList = tableTag.find_all(findTdElInTableInterface)
         else:
@@ -689,7 +689,7 @@ def modifyAndSaveHtml(soup, destinationFile, tokenList):
         interfacesTag = tableTagContainer.find(lambda tag: tag.name == "table"
             and tag.has_attr("id")
             and tag["id"] == "summaryTableIdInterface")
-        addApplerefToPackageDetailPage(interfacesTag, "intf") # add after if any links exist
+        addApplerefToPackageDetailPage(interfacesTag, "Interface") # add after if any links exist
 
     # make sure we have folder heirarchy or else we get no such file/directory
     if not os.path.exists(os.path.split(destinationFile)[0]):
@@ -797,14 +797,14 @@ def asyncScrapePage(dictKey):
     # Skin Part -> property (instp)
     # skin states -> property (instp)
     # effects -> property (instp)
-    # Event -> binding (binding)
+    # Event -> Event (Event)
     # Class -> class (cl)
     # method -> method (clm)
     # protected method -> method (clm)
-    # Interface, package -> interface (intf)
+    # Interface, package -> Interface (Interface)
     # Style -> property (instp)
     # mobile theme styles -> property (instp)
-    # Package -> category (cat)
+    # Package -> Package (Package)
 
     try:
 
@@ -860,7 +860,7 @@ def asyncScrapePage(dictKey):
             # note that the anchor can be either "classSummary" or "interfaceSummary", so since it can 
             # have one or both, then we just don't provide an anchor.
             # add tuple to the list. tuple is of the format (refname, anchor)
-            tokenList.append( ("//apple_ref/cpp/cat/{}".format(pageName), "") )
+            tokenList.append( ("//apple_ref/cpp/Package/{}".format(pageName), "") )
 
         else:
 
@@ -961,7 +961,7 @@ def asyncScrapePage(dictKey):
                 eventList = getTagListFormatTwo(eventTableTag, "a", "hideInheritedEvent")
 
                 # add to token list
-                tokenList.extend(getTokenAnchorTupleListFromATags(eventList, "binding", pageName))
+                tokenList.extend(getTokenAnchorTupleListFromATags(eventList, "Event", pageName))
 
 
             # **************************
