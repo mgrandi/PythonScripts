@@ -718,7 +718,11 @@ def trouble(message):
     @param message - the error message'''
 
     print(message + "\n")
-    printTraceback()
+    # this fails if no exception is active...
+    try:
+        printTraceback()
+    except Exception as e:
+        pass
     sys.exit(1)
 
 
